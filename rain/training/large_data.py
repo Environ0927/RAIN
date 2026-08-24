@@ -48,6 +48,7 @@ class IndexPartition:
     client_indices: tuple[tuple[int, ...], ...]
     dirichlet_alpha: float
     root_bias: float
+    validation_indices: tuple[int, ...] = ()
     client_ids: tuple[str, ...] = ()
     partition_kind: str = "dirichlet"
     unused_sample_count: int = 0
@@ -56,6 +57,7 @@ class IndexPartition:
         result = asdict(self)
         result["root_indices"] = list(self.root_indices)
         result["calibration_indices"] = list(self.calibration_indices)
+        result["validation_indices"] = list(self.validation_indices)
         result["client_indices"] = [list(value) for value in self.client_indices]
         return result
 
@@ -65,7 +67,9 @@ class IndexPartition:
 
 def _transforms(name: str, *, training: bool):
     from torchvision import transforms
-    if name == "cifar100":
+    if name == "cifar10":
+        mean, std, size = (0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616), 32
+    elif name == "cifar100":
         mean, std, size = (0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761), 32
     elif name == "femnist":
         # FEMNIST is already writer-partitioned.  Avoid augmentation so that
@@ -496,6 +500,12 @@ def load_large_dataset(
     name: str, *, root: str | Path, download: bool = True,
 ) -> DatasetBundle:
     normalized = name.lower().replace("-", "")
+    if normalized == "cifar10":
+        from torchvision.datasets import CIFAR10
+        train = CIFAR10(root=root, train=True, download=download, transform=_transforms("cifar10", training=True))
+        reference = CIFAR10(root=root, train=True, download=download, transform=_transforms("cifar10", training=False))
+        test = CIFAR10(root=root, train=False, download=download, transform=_transforms("cifar10", training=False))
+        return DatasetBundle(train, reference, test, np.asarray(train.targets, dtype=np.int64), 10, (3, 32, 32))
     if normalized == "cifar100":
         from torchvision.datasets import CIFAR100
         train = CIFAR100(root=root, train=True, download=download, transform=_transforms("cifar100", training=True))
@@ -575,6 +585,7 @@ def partition_femnist_dataset(
     clients: int,
     root_size: int,
     calibration_size: int = 0,
+    validation_size: int = 0,
     root_bias: float,
     seed: int,
     minimum_client_size: int = 2,
@@ -586,8 +597,8 @@ def partition_femnist_dataset(
         raise ValueError("targets must be a non-empty vector of non-negative labels")
     if len(writer_indices) != len(writer_ids):
         raise ValueError("FEMNIST writer indices and IDs must have equal length")
-    if root_size < 1 or calibration_size < 0:
-        raise ValueError("root_size must be positive and calibration_size non-negative")
+    if root_size < 1 or calibration_size < 0 or validation_size < 0:
+        raise ValueError("root_size must be positive and reserved sizes non-negative")
     if not 0 <= root_bias <= 1:
         raise ValueError("root_bias must be in [0, 1]")
     eligible = [index for index, values in enumerate(writer_indices) if len(values) >= minimum_client_size]
@@ -603,20 +614,22 @@ def partition_femnist_dataset(
         if writer not in selected_set
         for sample in values
     ], dtype=np.int64)
-    if root_size + calibration_size > len(public_pool):
-        raise ValueError("FEMNIST writer-disjoint root/calibration pool is too small")
+    if root_size + calibration_size + validation_size > len(public_pool):
+        raise ValueError("FEMNIST writer-disjoint reserved pool is too small")
     root, remaining = _select_biased_indices(
         labels, public_pool, size=root_size, bias=root_bias, rng=rng,
     )
     rng.shuffle(remaining)
     calibration = remaining[:calibration_size].tolist()
+    validation = remaining[calibration_size:calibration_size + validation_size].tolist()
     client_partitions = [tuple(int(value) for value in writer_indices[index]) for index in selected_writers]
-    used = len(root) + len(calibration) + sum(map(len, client_partitions))
+    used = len(root) + len(calibration) + len(validation) + sum(map(len, client_partitions))
     return IndexPartition(
         seed=seed, root_indices=tuple(sorted(root)),
         calibration_indices=tuple(sorted(calibration)),
         client_indices=tuple(client_partitions), dirichlet_alpha=0.0,
         root_bias=float(root_bias),
+        validation_indices=tuple(sorted(validation)),
         client_ids=tuple(writer_ids[index] for index in selected_writers),
         partition_kind="natural-writer", unused_sample_count=int(labels.size - used),
     )
@@ -628,6 +641,7 @@ def partition_large_dataset(
     clients: int,
     root_size: int,
     calibration_size: int = 0,
+    validation_size: int = 0,
     root_bias: float,
     dirichlet_alpha: float,
     seed: int,
@@ -639,10 +653,10 @@ def partition_large_dataset(
     classes = int(labels.max()) + 1
     if not 1 <= clients <= labels.size:
         raise ValueError("clients must lie in [1, sample_count]")
-    if calibration_size < 0:
-        raise ValueError("calibration_size must be non-negative")
-    if not 1 <= root_size < labels.size - calibration_size - clients * minimum_client_size:
-        raise ValueError("root/calibration sizes leave insufficient client samples")
+    if calibration_size < 0 or validation_size < 0:
+        raise ValueError("reserved sizes must be non-negative")
+    if not 1 <= root_size < labels.size - calibration_size - validation_size - clients * minimum_client_size:
+        raise ValueError("reserved sizes leave insufficient client samples")
     if not 0 <= root_bias <= 1:
         raise ValueError("root_bias must be in [0, 1]")
     if not np.isfinite(dirichlet_alpha) or dirichlet_alpha <= 0:
@@ -679,6 +693,16 @@ def partition_large_dataset(
             for values in remaining
         ]
 
+    validation: list[int] = []
+    if validation_size:
+        pool = np.concatenate(remaining); rng.shuffle(pool)
+        validation = pool[:validation_size].tolist()
+        selected = set(validation)
+        remaining = [
+            np.asarray([value for value in values if int(value) not in selected], dtype=np.int64)
+            for values in remaining
+        ]
+
     partitions: list[list[int]] = [[] for _ in range(clients)]
     for values in remaining:
         if not len(values):
@@ -701,4 +725,5 @@ def partition_large_dataset(
         seed=seed, root_indices=tuple(sorted(root)), calibration_indices=tuple(sorted(calibration)),
         client_indices=tuple(tuple(values) for values in partitions),
         dirichlet_alpha=float(dirichlet_alpha), root_bias=float(root_bias),
+        validation_indices=tuple(sorted(validation)),
     )

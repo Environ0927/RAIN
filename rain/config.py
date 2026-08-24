@@ -35,4 +35,17 @@ def load_config(path: str | Path) -> dict[str, object]:
     preprocessing = str(protocol.get("preprocessing", "clip_noise" if backend == "secure" else "none"))
     if preprocessing not in {"none", "clip_noise"}:
         raise ValueError("protocol.preprocessing must be 'none' or 'clip_noise'")
+    training = value["training"]
+    if int(training.get("local_steps", 1)) < 1:
+        raise ValueError("training.local_steps must be positive")
+    if "client_learning_rate" in training:
+        if float(training["client_learning_rate"]) <= 0:
+            raise ValueError("training.client_learning_rate must be positive")
+        momentum = float(training.get("client_momentum", 0.0))
+        if not 0 <= momentum < 1:
+            raise ValueError("training.client_momentum must lie in [0, 1)")
+        if float(training.get("client_weight_decay", 0.0)) < 0:
+            raise ValueError("training.client_weight_decay must be non-negative")
+        if bool(training.get("client_nesterov", False)) and momentum <= 0:
+            raise ValueError("training.client_nesterov requires positive momentum")
     return value

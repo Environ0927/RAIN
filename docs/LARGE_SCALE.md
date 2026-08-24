@@ -9,6 +9,7 @@ mini-batches. It supports:
 
 | Dataset | Model | Classes | Parameters | Input |
 |---|---|---:|---:|---:|
+| CIFAR-10 | small-image ResNet-18 | 10 | 11,173,962 | 3x32x32 |
 | FEMNIST | two-convolution CNN | 62 | 3,246,270 | 1x28x28 |
 | CIFAR-100 | small-image ResNet-34 | 100 | 21,328,292 | 3x32x32 |
 | Tiny-ImageNet | small-image ResNet-50 | 200 | 23,910,152 | 3x64x64 |
@@ -20,7 +21,7 @@ checkpointing. Protocol arithmetic remains exact NumPy integer/bit arithmetic.
 
 ## Data preparation
 
-CIFAR-100 downloads automatically through torchvision. FEMNIST can be
+CIFAR-10 and CIFAR-100 download automatically through torchvision. FEMNIST can be
 downloaded from the SHA-256-pinned TensorFlow Federated release and converted
 into the bounded-memory cache with:
 
@@ -65,7 +66,7 @@ data/tiny-imagenet-200/val/
 The original Tiny-ImageNet validation annotation layout is supported directly;
 it does not need to be reorganized into class directories.
 
-CIFAR-100 and Tiny-ImageNet use a seeded per-class Dirichlet allocation.
+CIFAR-10, CIFAR-100, and Tiny-ImageNet use a seeded per-class Dirichlet allocation.
 FEMNIST deterministically selects `population_clients` natural writers, then
 samples `clients` participants without replacement each round; root and
 calibration examples come only from writers outside that population. The full

@@ -107,7 +107,7 @@ def main():
            "preprocessing": preprocessing, "stop_after": stop_round})
 
     data_name = data["name"].lower().replace("-", "")
-    large_data = data_name in ("femnist", "cifar100", "tinyimagenet", "tinyimagenet200")
+    large_data = data_name in ("femnist", "cifar10", "cifar100", "tinyimagenet", "tinyimagenet200")
     workers = int(data.get("workers", 0))
     validation_loader = None
     if large_data:
@@ -126,18 +126,23 @@ def main():
                 clients=int(data.get("population_clients", data["clients"])),
                 root_size=int(data["server_pc"]),
                 calibration_size=int(data.get("calibration_pc", 0)),
+                validation_size=int(data.get("validation_pc", 0)),
                 root_bias=float(data.get("reference_bias", 1 / 62)), seed=seed,
+                minimum_client_size=int(data.get("minimum_client_size", 2)),
             )
         else:
             partition = partition_large_dataset(
-                bundle.targets, clients=int(data["clients"]), root_size=int(data["server_pc"]),
+                bundle.targets, clients=int(data.get("population_clients", data["clients"])),
+                root_size=int(data["server_pc"]),
                 calibration_size=int(data.get("calibration_pc", 0)),
+                validation_size=int(data.get("validation_pc", 0)),
                 root_bias=float(data.get("reference_bias", .1)),
                 dirichlet_alpha=float(data.get("dirichlet_alpha", .5)), seed=seed,
+                minimum_client_size=int(data.get("minimum_client_size", 2)),
             )
         partition.save(output / "data_split.json")
         dataset = {
-            "femnist": "FEMNIST", "cifar100": "CIFAR100",
+            "femnist": "FEMNIST", "cifar10": "CIFAR10", "cifar100": "CIFAR100",
             "tinyimagenet": "TinyImageNet", "tinyimagenet200": "TinyImageNet",
         }[data_name]
         inputs, classes = int(np.prod(bundle.input_shape)), bundle.classes
@@ -147,9 +152,10 @@ def main():
             bundle.test, batch_size=int(training.get("test_batch_size", 128)),
             shuffle=False, num_workers=workers, pin_memory=device.type == "cuda",
         )
-        if partition.calibration_indices:
+        validation_indices = partition.validation_indices or partition.calibration_indices
+        if validation_indices:
             validation_loader = DataLoader(
-                Subset(bundle.reference, list(partition.calibration_indices)),
+                Subset(bundle.reference, list(validation_indices)),
                 batch_size=int(training.get("test_batch_size", 128)), shuffle=False,
                 num_workers=workers, pin_memory=device.type == "cuda",
             )
@@ -201,6 +207,19 @@ def main():
         }
     _write(output / "privacy_accountant.json", privacy_value)
 
+    local_sgd = "client_learning_rate" in training
+    local_trainer = None
+    if local_sgd:
+        from rain.training.local_update import LocalSGDTrainer
+        local_trainer = LocalSGDTrainer(
+            model,
+            learning_rate=float(training["client_learning_rate"]),
+            momentum=float(training.get("client_momentum", 0.0)),
+            weight_decay=float(training.get("client_weight_decay", 0.0)),
+            nesterov=bool(training.get("client_nesterov", False)),
+            amp=bool(training.get("amp", False)),
+        )
+
     start_round = 0; batch_rng = np.random.default_rng(seed)
     if args.resume:
         checkpoint = torch.load(args.resume, map_location=device)
@@ -216,7 +235,8 @@ def main():
         raise ValueError("checkpoint next_round must be smaller than --stop-after")
     raw_path = output / "rounds.jsonl"
     for round_id in range(start_round, stop_round):
-        started = time.perf_counter(); updates = []; model.train(); batch_size = int(training["batch_size"])
+        started = time.perf_counter(); updates = []; local_results = []
+        model.train(); batch_size = int(training["batch_size"])
         local_steps = int(training.get("local_steps", 1))
         if local_steps < 1:
             raise ValueError("training.local_steps must be positive")
@@ -231,7 +251,7 @@ def main():
         else:
             active_client_ids = list(range(client_count))
         for update_position, client_id in enumerate(active_client_ids):
-            accumulated = None
+            accumulated = None; local_batches = []
             for local_step in range(local_steps):
                 if large_data:
                     from torch.utils.data import default_collate
@@ -253,13 +273,25 @@ def main():
                 if attack.get("name") == "scaling" and update_position < int(attack.get("malicious_clients", 0)):
                     from attacks import add_backdoor
                     batch_values, batch_targets = add_backdoor(batch_values, batch_targets, dataset)
-                model.zero_grad(set_to_none=True)
-                use_amp = bool(training.get("amp", False)) and device.type == "cuda"
-                with torch.autocast(device_type=device.type, enabled=use_amp):
-                    loss_fn(model(batch_values), batch_targets).backward()
-                flattened = torch.cat([p.grad.detach().reshape(-1) for p in model.parameters()]).cpu().numpy()
-                accumulated = flattened.copy() if accumulated is None else accumulated + flattened
-            updates.append(accumulated / local_steps)
+                if local_sgd:
+                    local_batches.append((batch_values, batch_targets))
+                else:
+                    model.zero_grad(set_to_none=True)
+                    use_amp = bool(training.get("amp", False)) and device.type == "cuda"
+                    with torch.autocast(device_type=device.type, enabled=use_amp):
+                        loss_fn(model(batch_values), batch_targets).backward()
+                    flattened = torch.cat([p.grad.detach().reshape(-1) for p in model.parameters()]).cpu().numpy()
+                    accumulated = flattened.copy() if accumulated is None else accumulated + flattened
+            if local_sgd:
+                local_result = local_trainer.run(model, local_batches, loss_fn)
+                local_results.append(local_result)
+                updates.append(local_result.update)
+            else:
+                updates.append(accumulated / local_steps)
+        if local_sgd:
+            from rain.training.local_update import apply_weighted_buffers
+            buffer_weights = np.asarray([item.examples_seen for item in local_results], dtype=np.float64)
+            apply_weighted_buffers(model, local_results, buffer_weights)
         update_matrix = np.stack(updates)
         needs_reference = aggregation in ("rain", "flod") or attack.get("name", "none") != "none"
         reference_bits = reference.direction(model) if needs_reference else None
@@ -281,7 +313,11 @@ def main():
         else:
             from rain.training.plaintext_aggregation import aggregate_plaintext
             if aggregation == "fedavg":
-                if large_data:
+                if local_sgd:
+                    client_weights = np.asarray(
+                        [item.examples_seen for item in local_results], dtype=np.float64
+                    )
+                elif large_data:
                     client_weights = np.asarray(
                         [len(client_indices[index]) for index in active_client_ids], dtype=np.float64
                     )
@@ -351,6 +387,10 @@ def main():
                "validation_balanced_accuracy": validation["balanced_accuracy"],
                "backend": backend, "learning_rate": effective_lr,
                "local_steps": local_steps,
+               "client_update": "local_sgd" if local_sgd else "gradient_average",
+               "client_learning_rate": float(training["client_learning_rate"]) if local_sgd else None,
+               "client_momentum": float(training.get("client_momentum", 0.0)) if local_sgd else None,
+               "client_weight_decay": float(training.get("client_weight_decay", 0.0)) if local_sgd else None,
                "epsilon": privacy_report.epsilon if privacy_report is not None else None,
                "delta": privacy_report.delta if privacy_report is not None else float(privacy.get("delta", 1e-5)),
                "asr": asr,

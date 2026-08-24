@@ -13,12 +13,12 @@ from rain.transport import LogicalTransport
 
 def test_large_partition_is_deterministic_disjoint_and_complete(tmp_path):
     targets = np.repeat(np.arange(100), 20)
-    kwargs = dict(clients=12, root_size=100, calibration_size=100, root_bias=.1,
+    kwargs = dict(clients=12, root_size=100, calibration_size=100, validation_size=100, root_bias=.1,
                   dirichlet_alpha=.5, seed=17, minimum_client_size=2)
     left = partition_large_dataset(targets, **kwargs)
     right = partition_large_dataset(targets, **kwargs)
     assert left == right
-    groups = [set(left.root_indices), set(left.calibration_indices)] + [set(values) for values in left.client_indices]
+    groups = [set(left.root_indices), set(left.calibration_indices), set(left.validation_indices)] + [set(values) for values in left.client_indices]
     assert all(groups[i].isdisjoint(groups[j]) for i in range(len(groups)) for j in range(i + 1, len(groups)))
     assert set.union(*groups) == set(range(targets.size))
     assert min(map(len, left.client_indices)) >= 2
@@ -92,7 +92,7 @@ def test_femnist_partition_is_natural_and_writer_disjoint():
     writer_indices = tuple(tuple(range(index * 20, (index + 1) * 20)) for index in range(12))
     writer_ids = tuple(f"writer-{index}" for index in range(12))
     targets = np.arange(240, dtype=np.int64) % 62
-    kwargs = dict(clients=4, root_size=30, calibration_size=20,
+    kwargs = dict(clients=4, root_size=30, calibration_size=20, validation_size=10,
                   root_bias=1 / 62, seed=19, minimum_client_size=2)
     left = partition_femnist_dataset(targets, writer_indices, writer_ids, **kwargs)
     right = partition_femnist_dataset(targets, writer_indices, writer_ids, **kwargs)
@@ -102,9 +102,10 @@ def test_femnist_partition_is_natural_and_writer_disjoint():
     expected = {writer_ids.index(name): set(values)
                 for name, values in zip(left.client_ids, left.client_indices)}
     assert all(values == set(writer_indices[index]) for index, values in expected.items())
-    public = set(left.root_indices) | set(left.calibration_indices)
+    public = set(left.root_indices) | set(left.calibration_indices) | set(left.validation_indices)
     assert all(public.isdisjoint(values) for values in map(set, left.client_indices))
     assert set(left.root_indices).isdisjoint(left.calibration_indices)
+    assert set(left.validation_indices).isdisjoint(left.calibration_indices)
 
 
 def test_large_models_shapes_and_parameter_scale():
