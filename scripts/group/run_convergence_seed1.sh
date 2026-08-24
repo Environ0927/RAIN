@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-track="${1:?usage: run_convergence_seed1.sh {primary|baselines} [gpu-index]}"
+if [[ $# -lt 1 ]]; then
+    echo "usage: run_convergence_seed1.sh primary-or-baselines [gpu-index]" >&2
+    exit 2
+fi
+track="$1"
 gpu="${2:-0}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 python_bin="${RAIN_PYTHON:-/home/yuhang.li/miniconda3/envs/rain-artifact/bin/python}"
