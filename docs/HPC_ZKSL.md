@@ -1,14 +1,15 @@
 # Running RAIN on Zhongke Suanlian Cloud
 
-This repository has been verified on the Northwest-1 cluster login node with
-the following account-local setup:
+This repository has been verified on both the Northwest-1 and East-China
+cluster login nodes. Their filesystems are independent.
 
 ```text
-SSH alias: rain-hpc
-login host: c1.hpcmaster.com:50888
-repository: $HOME/yuhangli/RAIN
-GPU partition: 4090
-runtime module: python/pytorch
+Cluster        SSH alias       Login host                    GPU partition
+Northwest-1    rain-hpc        c1.hpcmaster.com:50888        4090
+East-China     rain-hpc-east   dl01.hpcmaster.com:50888      A800-N
+
+Repository on each cluster: $HOME/yuhangli/RAIN
+Runtime module: python/pytorch
 ```
 
 The observed module provides Python 3.12.2, PyTorch 2.4.1+cu118,
@@ -24,6 +25,10 @@ cd "$HOME/yuhangli/RAIN"
 git pull --ff-only
 ```
 
+Use `ssh rain-hpc-east` instead for East China. Do not copy an absolute data
+path from one cluster to the other: code, datasets, calibration files, and
+outputs must exist on the selected cluster's own storage.
+
 Do not run training directly on the login node. First submit the bounded GPU
 smoke job:
 
@@ -31,6 +36,12 @@ smoke job:
 sbatch scripts/slurm/gpu_smoke.sbatch
 squeue -u "$USER"
 tail -f slurm-rain-gpu-smoke-JOBID.out
+```
+
+On East China, override the script's Northwest-1 default partition:
+
+```bash
+sbatch --partition=A800-N scripts/slurm/gpu_smoke.sbatch
 ```
 
 The smoke job checks the allocated GPU, performs a CUDA matrix multiplication,
@@ -54,6 +65,8 @@ before attempting a full run:
 sbatch --export=ALL,MODE=train,CONFIG=configs/quick/cifar100_resnet34.json,OUTPUT=outputs/cifar100-quick \
   scripts/slurm/run_experiment.sbatch
 ```
+
+Add `--partition=A800-N` before `--export` when submitting on East China.
 
 FEMNIST and Tiny-ImageNet are not downloaded automatically. Upload them to the
 same Northwest-1 cluster storage used by the job:
