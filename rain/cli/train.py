@@ -208,9 +208,10 @@ def main():
         if checkpoint.get("config") != config:
             raise ValueError("checkpoint configuration does not match --config")
         model.load_state_dict(checkpoint["model"]); start_round = int(checkpoint["next_round"])
-        batch_rng.bit_generator.state = checkpoint["batch_rng"]; torch.set_rng_state(checkpoint["torch_rng"])
+        batch_rng.bit_generator.state = checkpoint["batch_rng"]
+        torch.set_rng_state(checkpoint["torch_rng"].cpu())
         if device.type == "cuda" and checkpoint.get("cuda_rng") is not None:
-            torch.cuda.set_rng_state_all(checkpoint["cuda_rng"])
+            torch.cuda.set_rng_state_all([state.cpu() for state in checkpoint["cuda_rng"]])
     if start_round >= stop_round:
         raise ValueError("checkpoint next_round must be smaller than --stop-after")
     raw_path = output / "rounds.jsonl"
