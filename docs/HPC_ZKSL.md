@@ -36,6 +36,15 @@ tail -f slurm-rain-gpu-smoke-JOBID.out
 The smoke job checks the allocated GPU, performs a CUDA matrix multiplication,
 runs the complete test suite, and executes a 10,000-coordinate RAIN round.
 
+The protocol-only path can be checked independently on the CPU partition:
+
+```bash
+sbatch scripts/slurm/cpu_protocol_smoke.sbatch
+```
+
+This job runs the test suite and exact protocol rounds at 100,000 and 1,000,000
+coordinates. It does not use a GPU or download a dataset.
+
 ## Quick training jobs
 
 CIFAR-100 is downloaded automatically. Submit its one-round configuration

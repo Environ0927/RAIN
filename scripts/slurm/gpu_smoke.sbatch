@@ -17,6 +17,8 @@ module load python/pytorch
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 
+nvidia-smi
+
 python - <<'PY'
 import platform
 import torch
