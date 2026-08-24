@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data": {"name": "cifar100", "root": "./data", "download": false, "clients": 10, "server_pc": 200, "calibration_pc": 500, "reference_bias": 0.01, "dirichlet_alpha": 0.5, "workers": 4, "reference_batch_size": 32},
   "model": {"name": "resnet34-small", "num_classes": 100},
-  "training": {"rounds": 1000, "batch_size": 64, "local_steps": 1, "test_batch_size": 256, "learning_rate": 0.002, "minimum_learning_rate": 0.0001, "lr_schedule": "cosine", "evaluation_every": 10, "seed": 1, "checkpoint_every": 25, "amp": true},
+  "training": {"rounds": 1000, "batch_size": 64, "local_steps": 1, "test_batch_size": 256, "learning_rate": 0.0002, "minimum_learning_rate": 0.00001, "lr_schedule": "cosine", "evaluation_every": 10, "test_evaluation_every": 1000, "seed": 1, "checkpoint_every": 25, "amp": true},
   "protocol": {"aggregation": "rain", "backend": "plaintext", "preprocessing": "none", "calibration": "calibration/convergence_cifar100_sigma0.json"},
   "privacy": {"clip_norm": 1.0, "noise_multiplier": 0.0, "delta": 0.00001},
   "attack": {"name": "none", "malicious_clients": 0}

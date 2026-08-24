@@ -45,11 +45,13 @@ python -m rain.cli.train --config configs/convergence/cifar100_flod.json \
   --output outputs/convergence/cifar100-flod-seed1 --device cuda
 ```
 
-Do not select learning rates using test accuracy.  The checked-in values are
-initial presets.  Before a paper result, apply the same small candidate grid
-to every method using a held-out validation split, freeze the selected values,
-then run at least three seeds.  Report every method, including a FLOD result
-that is stronger than RAIN.
+Do not select learning rates using test accuracy. The 500 reserved calibration
+examples also form a held-out validation loader, and the convergence configs
+write `validation_accuracy` every ten rounds while withholding test accuracy
+until round 1000. The checked-in values are initial presets. Before a paper
+result, apply the same small candidate-grid size to every method, freeze the
+selected values, then run at least three seeds. Report every method, including
+a FLOD result that is stronger than RAIN.
 
 Plot only from raw JSONL logs:
 
@@ -62,3 +64,6 @@ python -m rain.cli.plot_convergence --inputs \
   --output outputs/convergence/cifar100-seed1.png \
   --title "CIFAR-100 / ResNet-34 (plaintext, sigma=0)"
 ```
+
+During learning-rate selection, add `--metric validation_accuracy`. Final
+paper curves use the test metric after hyperparameters have been frozen.

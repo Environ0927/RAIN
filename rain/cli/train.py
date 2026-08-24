@@ -99,8 +99,9 @@ def main():
     data_name = data["name"].lower().replace("-", "")
     large_data = data_name in ("femnist", "cifar100", "tinyimagenet", "tinyimagenet200")
     workers = int(data.get("workers", 0))
+    validation_loader = None
     if large_data:
-        from torch.utils.data import DataLoader
+        from torch.utils.data import DataLoader, Subset
         from rain.training.large_data import (
             load_large_dataset, partition_femnist_dataset, partition_large_dataset,
         )
@@ -136,6 +137,12 @@ def main():
             bundle.test, batch_size=int(training.get("test_batch_size", 128)),
             shuffle=False, num_workers=workers, pin_memory=device.type == "cuda",
         )
+        if partition.calibration_indices:
+            validation_loader = DataLoader(
+                Subset(bundle.reference, list(partition.calibration_indices)),
+                batch_size=int(training.get("test_batch_size", 128)), shuffle=False,
+                num_workers=workers, pin_memory=device.type == "cuda",
+            )
     else:
         import data_loaders
         dataset = {"mnist": "MNIST", "fmnist": "FMNIST", "cifar10": "CIFAR10"}[data_name]
@@ -309,13 +316,24 @@ def main():
             for parameter in model.parameters():
                 count = parameter.numel(); update = direction[offset:offset + count].reshape(parameter.shape)
                 parameter.sub_(effective_lr * update.to(device)); offset += count
-        evaluate_now = (round_id + 1) % int(training.get("evaluation_every", 1)) == 0 or round_id + 1 == int(training["rounds"])
-        evaluation = _evaluate(model, test_loader, device, classes) if evaluate_now else {
+        final_round = round_id + 1 == int(training["rounds"])
+        validation_now = validation_loader is not None and (
+            (round_id + 1) % int(training.get("evaluation_every", 1)) == 0 or final_round
+        )
+        test_every = int(training.get("test_evaluation_every", training.get("evaluation_every", 1)))
+        test_now = (round_id + 1) % test_every == 0 or final_round
+        evaluation = _evaluate(model, test_loader, device, classes) if test_now else {
             "loss": None, "accuracy": None, "balanced_accuracy": None
         }
-        asr = _evaluate_asr(model, test_loader, device, dataset) if evaluate_now and attack.get("name") == "scaling" else None
+        validation = _evaluate(model, validation_loader, device, classes) if validation_now else {
+            "loss": None, "accuracy": None, "balanced_accuracy": None
+        }
+        asr = _evaluate_asr(model, test_loader, device, dataset) if test_now and attack.get("name") == "scaling" else None
         row = {"round": round_id, "wall_seconds": time.perf_counter() - started,
                **evaluation, **aggregation_metrics, "aggregation": aggregation,
+               "validation_loss": validation["loss"],
+               "validation_accuracy": validation["accuracy"],
+               "validation_balanced_accuracy": validation["balanced_accuracy"],
                "backend": backend, "learning_rate": effective_lr,
                "local_steps": local_steps,
                "epsilon": privacy_report.epsilon if privacy_report is not None else None,
