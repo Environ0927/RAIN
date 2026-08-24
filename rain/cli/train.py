@@ -79,15 +79,22 @@ def main():
     from rain.training.coordinator import RainRoundCoordinator
     from rain.training.reference import LoaderReferenceProvider, ReferenceProvider
 
-    device = torch.device(args.device if args.device != "cuda" or torch.cuda.is_available() else "cpu")
     data, model_cfg = config["data"], config["model"]
     training, protocol, privacy = config["training"], config["protocol"], config["privacy"]
+    aggregation = str(protocol["aggregation"]).lower()
+    backend = str(protocol.get("backend", "secure" if aggregation == "rain" else "plaintext")).lower()
+    preprocessing = str(protocol.get(
+        "preprocessing", "clip_noise" if backend == "secure" else "none"
+    )).lower()
+    device = torch.device(args.device if args.device != "cuda" or torch.cuda.is_available() else "cpu")
     seed = int(training["seed"]); random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
     if torch.cuda.is_available(): torch.cuda.manual_seed_all(seed)
     try: commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     except (OSError, subprocess.CalledProcessError): commit = "unavailable"
     _write(output / "environment.json", {"python": sys.version, "torch": torch.__version__,
-           "numpy": np.__version__, "platform": platform.platform(), "git_commit": commit, "device": str(device)})
+           "numpy": np.__version__, "platform": platform.platform(), "git_commit": commit,
+           "device": str(device), "aggregation": aggregation, "backend": backend,
+           "preprocessing": preprocessing})
 
     data_name = data["name"].lower().replace("-", "")
     large_data = data_name in ("femnist", "cifar100", "tinyimagenet", "tinyimagenet200")
@@ -149,14 +156,33 @@ def main():
     else:
         reference = ReferenceProvider(root_data, root_labels, loss_fn=loss_fn, seed=seed)
     reference.save_manifest(output / "reference_set.json")
-    tau = float(protocol["tau"]) if "tau" in protocol else load_calibration(protocol["calibration"]).tau
-    coordinator = RainRoundCoordinator(clip_norm=float(privacy["clip_norm"]),
-        noise_multiplier=float(privacy["noise_multiplier"]), tau=tau,
-        chunk_size=int(protocol["chunk_size"]), seed=seed)
-    privacy_report = account_privacy(participating_clients=int(data["clients"]), rounds=int(training["rounds"]),
-        clip_norm=float(privacy["clip_norm"]), noise_multiplier=float(privacy["noise_multiplier"]),
-        delta=float(privacy.get("delta", 1e-5)))
-    _write(output / "privacy_accountant.json", privacy_report.as_dict())
+    tau = None
+    if aggregation in ("rain", "flod"):
+        tau = float(protocol["tau"]) if "tau" in protocol else load_calibration(protocol["calibration"]).tau
+    coordinator = None
+    if backend == "secure":
+        coordinator = RainRoundCoordinator(clip_norm=float(privacy["clip_norm"]),
+            noise_multiplier=float(privacy["noise_multiplier"]), tau=float(tau),
+            chunk_size=int(protocol["chunk_size"]), seed=seed)
+    privacy_enabled = (
+        float(privacy["noise_multiplier"]) > 0
+        and (backend == "secure" or preprocessing == "clip_noise")
+    )
+    privacy_report = None
+    if privacy_enabled:
+        privacy_report = account_privacy(
+            participating_clients=int(data["clients"]), rounds=int(training["rounds"]),
+            clip_norm=float(privacy["clip_norm"]), noise_multiplier=float(privacy["noise_multiplier"]),
+            delta=float(privacy.get("delta", 1e-5)),
+        )
+        privacy_value = privacy_report.as_dict()
+    else:
+        privacy_value = {
+            "schema_version": 1, "enabled": False, "epsilon": None,
+            "delta": float(privacy.get("delta", 1e-5)),
+            "reason": "the convergence run applies no client-side DP noise",
+        }
+    _write(output / "privacy_accountant.json", privacy_value)
 
     start_round = 0; batch_rng = np.random.default_rng(seed)
     if args.resume:
@@ -215,7 +241,8 @@ def main():
                 accumulated = flattened.copy() if accumulated is None else accumulated + flattened
             updates.append(accumulated / local_steps)
         update_matrix = np.stack(updates)
-        reference_bits = reference.direction(model)
+        needs_reference = aggregation in ("rain", "flod") or attack.get("name", "none") != "none"
+        reference_bits = reference.direction(model) if needs_reference else None
         if attack.get("name", "none") != "none":
             target_direction = np.asarray(
                 attack.get("target_direction", reference_bits.astype(np.int8) * 2 - 1), dtype=np.int8
@@ -224,7 +251,49 @@ def main():
                 malicious_clients=int(attack.get("malicious_clients", 0)), seed=seed + round_id,
                 target_direction=target_direction, hamming_budget=attack.get("hamming_budget"),
                 scale=float(attack.get("scale", 10))))
-        result = coordinator.run_round(update_matrix, reference_bits, round_id=round_id)
+        if backend == "secure":
+            result = coordinator.run_round(update_matrix, reference_bits, round_id=round_id)
+            aggregate_update = result.direction_bits.astype(np.float32) * 2 - 1
+            aggregation_metrics = {
+                **result.metrics.as_dict(), "accepted_clients": None,
+                "weight_sum": None, "threshold_count": result.threshold_count,
+            }
+        else:
+            from rain.training.plaintext_aggregation import aggregate_plaintext
+            if aggregation == "fedavg":
+                if large_data:
+                    client_weights = np.asarray(
+                        [len(client_indices[index]) for index in active_client_ids], dtype=np.float64
+                    )
+                else:
+                    client_weights = np.asarray(
+                        [len(client_data[index]) for index in active_client_ids], dtype=np.float64
+                    )
+            else:
+                client_weights = None
+            round_seed = int(np.random.SeedSequence([seed, round_id]).generate_state(1)[0])
+            result = aggregate_plaintext(
+                update_matrix, method=aggregation, reference_bits=reference_bits, tau=tau,
+                preprocessing=preprocessing, clip_norm=float(privacy["clip_norm"]),
+                noise_multiplier=float(privacy["noise_multiplier"]), seed=round_seed,
+                client_weights=client_weights,
+            )
+            aggregate_update = result.update
+            plain_metrics = result.metrics
+            aggregation_metrics = {
+                "client_comp_seconds": plain_metrics.preprocessing_seconds,
+                "s0_comp_seconds": 0.0, "s1_comp_seconds": 0.0,
+                "server_comp_sum_seconds": plain_metrics.aggregation_seconds,
+                "server_comp_critical_seconds": plain_metrics.aggregation_seconds,
+                "offline_comp_seconds": 0.0,
+                "online_comp_seconds": plain_metrics.aggregation_seconds,
+                "client_to_server_bytes": 0, "server_to_server_bytes": 0,
+                "offline_bytes": 0, "online_bytes": 0, "message_count": 0,
+                "peak_memory_bytes": 0,
+                "accepted_clients": plain_metrics.accepted_clients,
+                "weight_sum": plain_metrics.weight_sum,
+                "threshold_count": plain_metrics.threshold_count,
+            }
         base_lr = float(training["learning_rate"])
         if training.get("lr_schedule", "constant") == "cosine":
             minimum_lr = float(training.get("minimum_learning_rate", 0.0))
@@ -232,7 +301,7 @@ def main():
             effective_lr = minimum_lr + .5 * (base_lr - minimum_lr) * (1 + np.cos(np.pi * progress))
         else:
             effective_lr = base_lr
-        direction = torch.from_numpy(result.direction_bits.astype(np.float32) * 2 - 1); offset = 0
+        direction = torch.from_numpy(aggregate_update); offset = 0
         with torch.no_grad():
             for parameter in model.parameters():
                 count = parameter.numel(); update = direction[offset:offset + count].reshape(parameter.shape)
@@ -243,9 +312,12 @@ def main():
         }
         asr = _evaluate_asr(model, test_loader, device, dataset) if evaluate_now and attack.get("name") == "scaling" else None
         row = {"round": round_id, "wall_seconds": time.perf_counter() - started,
-               **evaluation, **result.metrics.as_dict(), "learning_rate": effective_lr,
-               "local_steps": local_steps, "epsilon": privacy_report.epsilon,
-               "delta": privacy_report.delta, "asr": asr,
+               **evaluation, **aggregation_metrics, "aggregation": aggregation,
+               "backend": backend, "learning_rate": effective_lr,
+               "local_steps": local_steps,
+               "epsilon": privacy_report.epsilon if privacy_report is not None else None,
+               "delta": privacy_report.delta if privacy_report is not None else float(privacy.get("delta", 1e-5)),
+               "asr": asr,
                "participant_indices": active_client_ids
                if large_data and len(client_indices) > client_count else None}
         with raw_path.open("a", encoding="utf-8") as stream: stream.write(json.dumps(row, sort_keys=True) + "\n")

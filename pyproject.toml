@@ -38,6 +38,7 @@ rain-large-benchmark = "rain.cli.large_benchmark:main"
 rain-make-sweep = "rain.cli.make_sweep:main"
 rain-calibrate-large = "rain.cli.calibrate_large:main"
 rain-summarize = "rain.cli.summarize:main"
+rain-plot-convergence = "rain.cli.plot_convergence:main"
 
 [tool.setuptools.packages.find]
 include = ["rain*"]

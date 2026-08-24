@@ -17,15 +17,18 @@ def summarize(paths: list[Path]) -> list[dict[str, object]]:
         config_path = path.parent / "config.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))
         attack = config.get("attack", {"name": "none", "malicious_clients": 0})
-        key = (config["data"]["name"], config["model"]["name"], attack.get("name", "none"),
-               int(attack.get("malicious_clients", 0)))
+        protocol = config.get("protocol", {"aggregation": "unknown", "backend": "unknown"})
+        key = (config["data"]["name"], config["model"]["name"],
+               protocol["aggregation"], protocol.get("backend", "secure"),
+               attack.get("name", "none"), int(attack.get("malicious_clients", 0)))
         grouped[key].append(evaluated[-1])
     result = []
     metrics = ("accuracy", "balanced_accuracy", "asr", "wall_seconds",
                "client_to_server_bytes", "server_to_server_bytes", "epsilon")
     for key, rows in sorted(grouped.items()):
-        item = {"dataset": key[0], "model": key[1], "attack": key[2],
-                "malicious_clients": key[3], "runs": len(rows)}
+        item = {"dataset": key[0], "model": key[1], "aggregation": key[2],
+                "backend": key[3], "attack": key[4],
+                "malicious_clients": key[5], "runs": len(rows)}
         for metric in metrics:
             values = [float(row[metric]) for row in rows if row.get(metric) is not None]
             item[f"{metric}_mean"] = float(np.mean(values)) if values else None
