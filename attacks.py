@@ -311,8 +311,20 @@ def scaling_attack_insert_backdoor(each_worker_data, each_worker_label, dataset,
             # expand list of labels with number of backdoored images with attacker chosen target label
             each_worker_label[i] = torch.tensor(each_worker_label[i].tolist() +
                                    [attacker_chosen_target_label for i in range(number_of_backdoored_images)]).to(device)
+    elif any(name in dataset.lower() for name in ("mnist", "fashion", "fmnist", "cifar")):
+        target = 0
+        for i in range(f):
+            benign = each_worker_data[i]
+            count = max(1, benign.size(0) // 2)
+            chosen = torch.arange(count, device=benign.device) % benign.size(0)
+            poisoned, poison_labels = add_backdoor(
+                benign.index_select(0, chosen).clone(),
+                each_worker_label[i].index_select(0, chosen).clone(), dataset,
+            )
+            each_worker_data[i] = torch.cat([benign, poisoned], dim=0)
+            each_worker_label[i] = torch.cat([each_worker_label[i], poison_labels], dim=0)
     else:
-        raise NotImplementedError
+        raise NotImplementedError(f"backdoor trigger is unsupported for dataset {dataset}")
 
     return each_worker_data, each_worker_label
 
@@ -353,7 +365,19 @@ def add_backdoor(data, labels, dataset):
             # expand list of labels with number of backdoored images with attacker chosen target label
             for i in range(len(labels)):
                 labels[i] = attacker_chosen_target_label
+    elif any(name in dataset.lower() for name in ("mnist", "fashion", "fmnist", "cifar")):
+        if data.ndim != 4 or data.shape[-2] < 3 or data.shape[-1] < 3:
+            raise ValueError("image backdoor expects NCHW images of at least 3x3")
+        data = data.clone()
+        labels = labels.clone()
+        # High-valued 3x3 bottom-right square; normalization-safe and deterministic.
+        trigger_value = torch.maximum(
+            torch.amax(data, dim=tuple(range(1, data.ndim)), keepdim=True),
+            torch.ones((data.shape[0],) + (1,) * (data.ndim - 1), device=data.device, dtype=data.dtype),
+        )
+        data[:, :, -3:, -3:] = trigger_value
+        labels.fill_(0)
     else:
-        raise NotImplementedError
+        raise NotImplementedError(f"backdoor trigger is unsupported for dataset {dataset}")
 
     return data, labels

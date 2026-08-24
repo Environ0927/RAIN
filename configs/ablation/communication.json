@@ -1,0 +1,1 @@
+{"schema_version": 1, "data": {"name": "synthetic", "clients": [2, 4, 8, 16, 32]}, "model": {"name": "synthetic"}, "training": {"rounds": 1}, "protocol": {"aggregation": "rain", "tau": 0.4, "chunk_size": 65536}, "privacy": {"clip_norm": 1.0, "noise_multiplier": 4.0, "delta": 0.00001}, "sweep": {"dimension": [1000, 10000, 100000, 1000000]}}

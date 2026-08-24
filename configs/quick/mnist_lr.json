@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "data": {"name": "mnist", "clients": 4, "server_pc": 40, "reference_bias": 0.1, "non_iid_bias": 0.3},
+  "model": {"name": "lr", "num_classes": 10},
+  "training": {"rounds": 2, "batch_size": 16, "learning_rate": 0.01, "seed": 7, "checkpoint_every": 1},
+  "protocol": {"aggregation": "rain", "tau": 0.40, "chunk_size": 4096},
+  "privacy": {"clip_norm": 1.0, "noise_multiplier": 4.0, "delta": 0.00001},
+  "attack": {"name": "none", "malicious_clients": 0}
+}

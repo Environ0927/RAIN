@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "data": {"name": "femnist", "root": "./data", "download": false, "population_clients": 1000, "clients": 100, "server_pc": 124, "calibration_pc": 620, "reference_bias": 0.0161290323, "workers": 4, "reference_batch_size": 32},
+  "model": {"name": "cnn", "num_classes": 62},
+  "training": {"rounds": 200, "batch_size": 32, "local_steps": 2, "test_batch_size": 256, "learning_rate": 0.002, "minimum_learning_rate": 0.0001, "lr_schedule": "cosine", "evaluation_every": 5, "seed": 1, "checkpoint_every": 5, "amp": true},
+  "protocol": {"aggregation": "rain", "calibration": "calibration/femnist_cnn_sigma4.json", "chunk_size": 262144},
+  "privacy": {"clip_norm": 1.0, "noise_multiplier": 4.0, "delta": 0.00001},
+  "attack": {"name": "none", "malicious_clients": 0}
+}

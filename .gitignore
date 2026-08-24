@@ -58,6 +58,10 @@ data/HAR/
 data/MNIST/
 data/FashionMNIST/
 data/cifar-10-batches-py/
+data/cifar-100-python/
+data/tiny-imagenet-200/
+data/femnist/
+data/FEMNIST/
 data/*.tar.gz
 data/*.zip
 data/*.gz

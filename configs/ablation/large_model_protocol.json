@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "data": {"name": "synthetic", "clients": 2},
+  "model": {"name": "synthetic", "dimensions": [3246270, 11173962, 21328292, 23910152]},
+  "training": {"rounds": 1},
+  "protocol": {"aggregation": "rain", "tau": 0.4, "chunk_size": 262144},
+  "privacy": {"clip_norm": 1.0, "noise_multiplier": 4.0, "delta": 0.00001},
+  "sweep": {"clients": [2, 5, 10, 20], "chunk_size": [65536, 131072, 262144, 524288]}
+}

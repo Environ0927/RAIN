@@ -1,0 +1,8 @@
+# Install the CUDA build of torch/torchvision appropriate for the host first.
+numpy==1.26.4
+pytest==8.3.5
+matplotlib==3.8.4
+scipy==1.12.0
+scikit-learn==1.4.2
+hdbscan==0.8.33
+charset-normalizer==3.3.2

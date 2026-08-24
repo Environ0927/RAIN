@@ -11,6 +11,7 @@ import os
 import math
 import time
 import csv
+import json
 import subprocess
 
 import torch
@@ -66,7 +67,7 @@ def setup_from_cfg(cfg):
     return net, client_loaders, test_loader
 
 
-def parse_args():
+def parse_args(argv=None):
     """
     Parses all commandline arguments.
     """
@@ -88,6 +89,9 @@ def parse_args():
     parser.add_argument("--seed", help="seed", type=int, default=1)
     parser.add_argument("--nruns", help="number of runs for averaging accuracy", type=int, default=1)
     parser.add_argument("--test_every", help="testing interval", type=int, default=1)
+    parser.add_argument("--output_dir", type=str, default="./results")
+    parser.add_argument("--checkpoint_every", type=int, default=0)
+    parser.add_argument("--resume", type=str, default=None)
 
     ### Aggregations
     parser.add_argument("--aggregation", help="aggregation", type=str, default="fedavg")
@@ -153,8 +157,12 @@ def parse_args():
                         help="RAIN: override tau fraction if set (0~1). None to auto")
     parser.add_argument("--w_max",       type=float, default=None,
                         help="RAIN: optional cap for ReLU weights")
+    parser.add_argument("--rain_calibration", type=str, default=None,
+                        help="RAIN: versioned offline calibration JSON (required unless --tau_override is set)")
+    parser.add_argument("--rain_chunk_size", type=int, default=4096,
+                        help="RAIN: protocol coordinate chunk size")
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def get_device(device):
@@ -182,6 +190,12 @@ def get_net(net_type, num_inputs, num_outputs=10):
     elif net_type == "cnn":
         from models.simple_cnn import SimpleCNN1C
         net = SimpleCNN1C(num_classes=num_outputs)
+    elif net_type in ("fnet", "fashionnet"):
+        from models.fnet import FashionNet
+        net = FashionNet(num_classes=num_outputs)
+    elif net_type in ("resnet18", "resnet18-cifar"):
+        from models.resnet_cifar import resnet18_cifar
+        net = resnet18_cifar(num_classes=num_outputs)
         print("Using SimpleCNN1C model")
     else:
         raise NotImplementedError(f"Unknown net type: {net_type}")
@@ -441,7 +455,7 @@ def main(args):
     # 文件名：dataset_model_aggregation_attack_YYYYMMDD-HHMMSS
     exp_name = f"{args.dataset}_{args.net}_{args.aggregation}_{args.byz_type}_{time.strftime('%Y%m%d-%H%M%S')}"
     # 把 paraString 写进 csv 第一行（见 metrics.py 的改动）
-    logger = MetricsLogger(out_dir="./results", exp_name=exp_name, para_string=paraString)
+    logger = MetricsLogger(out_dir=args.output_dir, exp_name=exp_name, para_string=paraString)
     uplink_enc, downlink_enc = "fp32", "fp32"
 
     # perform multiple runs
@@ -461,6 +475,14 @@ def main(args):
             np.random.seed(args.seed)
 
         net.apply(weight_init)  # initialization of model
+        start_round = 0
+        if args.resume and run == 1:
+            checkpoint = torch.load(args.resume, map_location=device)
+            net.load_state_dict(checkpoint["model"])
+            start_round = int(checkpoint["next_round"])
+            torch.set_rng_state(checkpoint["torch_rng"])
+            np.random.set_state(checkpoint["numpy_rng"])
+            random.setstate(checkpoint["python_rng"])
 
         # set aggregation specific variables
         if args.aggregation == "shieldfl":
@@ -482,6 +504,37 @@ def main(args):
         # assign data to the server and clients
         server_data, server_label, each_worker_data, each_worker_label = data_loaders.assign_data(train_data, args.bias, device,
             num_labels=num_labels, num_workers=args.nworkers, server_pc=args.server_pc, p=args.p, dataset=args.dataset, seed=args.seed)
+
+        rain_adapter = None
+        if args.aggregation == "rain":
+            from rain.privacy.calibration import load_calibration
+            from rain.training.adapter import TorchRainAdapter
+            from rain.training.coordinator import RainRoundCoordinator
+            from rain.training.reference import ReferenceProvider
+            if args.server_pc <= 0:
+                raise ValueError("--aggregation rain requires a non-empty root dataset")
+            if args.tau_override is not None:
+                rain_tau = float(args.tau_override)
+            elif args.rain_calibration:
+                rain_tau = load_calibration(args.rain_calibration).tau
+            else:
+                raise ValueError("RAIN requires --rain_calibration or an explicit --tau_override")
+            rain_adapter = TorchRainAdapter(
+                coordinator=RainRoundCoordinator(
+                    clip_norm=args.dp_clip,
+                    noise_multiplier=args.dp_sigma,
+                    tau=rain_tau,
+                    chunk_size=args.rain_chunk_size,
+                    seed=args.seed,
+                ),
+                reference_provider=ReferenceProvider(
+                    server_data, server_label, loss_fn=softmax_cross_entropy, seed=args.seed
+                ),
+                learning_rate=args.lr,
+            )
+            rain_adapter.reference_provider.save_manifest(
+                os.path.join(args.output_dir, f"{exp_name}.run{run}.reference.json")
+            )
 
         # perform data poisoning attacks
         if args.byz_type == "label_flipping_attack":
@@ -506,7 +559,7 @@ def main(args):
             # training
             # s_trust = None
             
-            for e in range(args.niter):
+            for e in range(start_round, args.niter):
                 t_round_start = time.time()  # (ADD) 本轮计时开始
                 net.train()
                 if e == 0: prev = torch.cat([p.data.flatten() for p in net.parameters()]).clone()
@@ -533,7 +586,7 @@ def main(args):
                 
                 server_comp_s = 0.0
                 # compute server update and append it to the end of the list
-                if args.aggregation in ["fltrust", "flod", "rainy_tssc"] or args.byz_type == "fltrust_attack":
+                if args.aggregation in ["fltrust", "flod"] or args.byz_type == "fltrust_attack":
                     t_srv0 = time.time()
                     net.zero_grad()
                     with torch.enable_grad():
@@ -606,29 +659,19 @@ def main(args):
                         client_frac=0.1,    # 参与比例（控制波长/起伏）
                         tie_mode="plus"     # 平票当 +1，减少锯齿
                     )
-                elif args.aggregation == "rainy_tssc":   
-                    from aggregation_rules_tssc import rainy_tssc_step
-                    # print("s_trust_pos_ratio =", float((s_trust).float().mean().item()))
-
-                    s_trust, stats = rainy_tssc_step(
-                        grad_list=grad_list, net=net, device=device, s_trust=s_trust, round_id=e,
-                        k_bits=args.k_bits, dp_clip=args.dp_clip, dp_sigma=args.dp_sigma,
-                        use_scale=args.use_scale, use_EF=args.use_EF,
-                        lambda_mad=args.lambda_mad, tau_override=args.tau_override,
-                        w_max=args.w_max, global_lr=args.lr
+                elif args.aggregation == "rain":
+                    # Existing attacks act only on client updates, before any sharing.
+                    flat_updates = [torch.cat([g.reshape(-1, 1) for g in client], dim=0) for client in grad_list]
+                    attacked_updates = byz(flat_updates, net, args.lr, args.nbyz, device)
+                    rain_result = rain_adapter.step(
+                        grad_list=attacked_updates, model=net, round_id=e
                     )
-                    # stats["s_trust_pos_ratio"] = float((s_trust > 0).float().mean().item())
-                    try:
-                        logger.log(extra=stats)
-                    except Exception:
-                        pass
-                elif args.aggregation == "rainy":
-                    stats = aggregation_rules.rain(
-                        grad_list=grad_list, net=net, device=device, lr=args.lr,
-                        dp_clip=args.dp_clip, dp_sigma=args.dp_sigma,
-                        use_scale=args.use_scale, use_EF=args.use_EF,
-                        lambda_mad=args.lambda_mad, tau_override=args.tau_override, w_max=args.w_max,
-                    )
+                    with open(os.path.join(args.output_dir, f"{exp_name}.protocol.jsonl"), "a", encoding="utf-8") as protocol_log:
+                        protocol_log.write(json.dumps({
+                            "round": e,
+                            "threshold_count": rain_result.threshold_count,
+                            **rain_result.metrics.as_dict(),
+                        }, sort_keys=True) + "\n")
                 else:
                     raise NotImplementedError
                 server_comp_s += (time.time() - t_srv1)
@@ -648,10 +691,14 @@ def main(args):
                     # 额外：细粒度指标（loss / balanced_acc）
                     m = eval_metrics(net, test_data, device, num_classes=num_outputs)  # loss / acc / bacc
                     # 通信估计（/round）
-                    comm_up, comm_down = estimate_comm_bytes(
-                        num_params=num_params, n_clients=args.nworkers,
-                        uplink_encoding=uplink_enc, downlink_encoding=downlink_enc
-                    )
+                    if args.aggregation == "rain":
+                        comm_up = rain_result.metrics.client_to_server_bytes
+                        comm_down = rain_result.metrics.server_to_server_bytes
+                    else:
+                        comm_up, comm_down = estimate_comm_bytes(
+                            num_params=num_params, n_clients=args.nworkers,
+                            uplink_encoding=uplink_enc, downlink_encoding=downlink_enc
+                        )
                     per_client_up_kb   = (comm_up / max(1, args.nworkers)) / 1024.0    # 每客户端上行
                     per_client_down_kb = (comm_down) / 1024.0    
                     # 回合耗时
@@ -670,8 +717,8 @@ def main(args):
                         comm_down=comm_down,
                         asr=(test_success_rate if args.byz_type == "scaling_attack" else None),
                         # ===== 新增 4 个核心指标 =====
-                        client_comp_s=avg_client_comp_s,        # 🧩
-                        server_comp_s=server_comp_s,            # 🧮
+                        client_comp_s=(rain_result.metrics.client_comp_seconds if args.aggregation == "rain" else avg_client_comp_s),
+                        server_comp_s=(rain_result.metrics.server_comp_sum_seconds if args.aggregation == "rain" else server_comp_s),
                         client_up_kb=per_client_up_kb,          # 📡
                         client_down_kb=per_client_down_kb,      # 📡
                         server_overall_s=elapsed                # ⏱️
@@ -685,6 +732,18 @@ def main(args):
                               % (e, test_accuracy, test_success_rate))
                     else:
                         print("Iteration %02d. Test_acc %0.4f" % (e, test_accuracy))
+
+                if args.checkpoint_every > 0 and (e + 1) % args.checkpoint_every == 0:
+                    os.makedirs(args.output_dir, exist_ok=True)
+                    torch.save({
+                        "schema_version": 1,
+                        "model": net.state_dict(),
+                        "next_round": e + 1,
+                        "torch_rng": torch.get_rng_state(),
+                        "numpy_rng": np.random.get_state(),
+                        "python_rng": random.getstate(),
+                        "args": vars(args),
+                    }, os.path.join(args.output_dir, f"{exp_name}.checkpoint.pt"))
 
         if args.mpspdz:
             server_process.wait()   # wait for process to exit

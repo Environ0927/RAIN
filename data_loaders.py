@@ -39,6 +39,10 @@ def get_shapes(dataset):
         num_inputs = 28 * 28
         num_outputs = 10
         num_labels = 10
+    elif ds == 'cifar10':
+        num_inputs = 3 * 32 * 32
+        num_outputs = 10
+        num_labels = 10
     else:
         raise NotImplementedError
     return num_inputs, num_outputs, num_labels
@@ -129,16 +133,21 @@ def load_data(dataset, seed):
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=100, shuffle=False)
         return train_loader, test_loader
 
-    elif ds in ('mnist', 'fmnist'):
+    elif ds in ('mnist', 'fmnist', 'cifar10'):
         import torchvision.transforms as T
         if ds == 'mnist':
             tfm = T.Compose([T.ToTensor(), T.Normalize((0.1307,), (0.3081,))])
             train_ds = torchvision.datasets.MNIST(root="./data", train=True,  download=True, transform=tfm)
             test_ds  = torchvision.datasets.MNIST(root="./data", train=False, download=True, transform=tfm)
-        else:
+        elif ds == 'fmnist':
             tfm = T.Compose([T.ToTensor(), T.Normalize((0.5,), (0.5,))])
             train_ds = torchvision.datasets.FashionMNIST(root="./data", train=True,  download=True, transform=tfm)
             test_ds  = torchvision.datasets.FashionMNIST(root="./data", train=False, download=True, transform=tfm)
+        else:
+            tfm = T.Compose([T.ToTensor(), T.Normalize((0.4914, 0.4822, 0.4465),
+                                                       (0.2470, 0.2435, 0.2616))])
+            train_ds = torchvision.datasets.CIFAR10(root="./data", train=True, download=True, transform=tfm)
+            test_ds = torchvision.datasets.CIFAR10(root="./data", train=False, download=True, transform=tfm)
 
         train_loader = torch.utils.data.DataLoader(
             train_ds, batch_size=100, shuffle=True,
@@ -154,7 +163,7 @@ def load_data(dataset, seed):
         raise NotImplementedError
 
 
-def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server_pc=100, p=0.1, dataset="HAR", seed=1):
+def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server_pc=100, p=0.1, dataset="HAR", seed=1, return_manifest=False):
     """
     Assign the data to the clients.
 
@@ -219,19 +228,23 @@ def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server
         each_worker_label = [each_worker_label[i] for i in random_order]
         return server_data, server_label, each_worker_data, each_worker_label
 
-    elif ds in ("MNIST", "FMNIST"):
+    elif ds in ("MNIST", "FMNIST", "CIFAR10"):
         # === 新：MNIST / FMNIST 路线（不依赖样本自带 clientId） ===
         each_worker_data = [[] for _ in range(num_workers)]
         each_worker_label = [[] for _ in range(num_workers)]
         server_data, server_label = [], []
+        server_indices = []
+        worker_indices = [[] for _ in range(num_workers)]
 
         # 收集各类样本
         by_class = [[] for _ in range(num_labels)]
+        global_index = 0
         for _, (data, label) in enumerate(train_data):
             data = data.to(device)      # [B,1,28,28]
             label = label.to(device)    # [B]
             for (x, y) in zip(data, label):
-                by_class[int(y.item())].append((x.unsqueeze(0), y))
+                by_class[int(y.item())].append((x.unsqueeze(0), y, global_index))
+                global_index += 1
 
         alpha = max(1e-3, (1.0 - bias))  # bias 越大，alpha 越小 => 越非IID
         for c in range(num_labels):
@@ -250,21 +263,24 @@ def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server
                 k = counts[wid]
                 if k <= 0:
                     continue
-                for (x, y) in pool[s:s+k]:
+                for (x, y, source_index) in pool[s:s+k]:
                     if server_counter[c] < samp_dis[c]:
                         server_data.append(x)   # [1,1,28,28]
                         server_label.append(y)
                         server_counter[c] += 1
+                        server_indices.append(source_index)
                     else:
                         each_worker_data[wid].append(x)   # [1,1,28,28]
                         each_worker_label[wid].append(y)
+                        worker_indices[wid].append(source_index)
                 s += k
 
         if server_pc != 0 and len(server_data) > 0:
             server_data = torch.cat(server_data, dim=0)               # [Ns,1,28,28]
             server_label = torch.stack(server_label, dim=0)           # [Ns]
         else:
-            server_data = torch.empty(size=(0, 1, 28, 28)).to(device)
+            image_shape = (3, 32, 32) if ds == "CIFAR10" else (1, 28, 28)
+            server_data = torch.empty(size=(0, *image_shape)).to(device)
             server_label = torch.empty(size=(0,)).to(device)
 
         # 合并每个客户端样本
@@ -273,14 +289,21 @@ def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server
                 each_worker_data[wid]  = torch.cat(each_worker_data[wid], dim=0)   # [Ni,1,28,28]
                 each_worker_label[wid] = torch.stack(each_worker_label[wid], dim=0)
             else:
-                each_worker_data[wid]  = torch.empty(size=(0, 1, 28, 28)).to(device)
+                image_shape = (3, 32, 32) if ds == "CIFAR10" else (1, 28, 28)
+                each_worker_data[wid]  = torch.empty(size=(0, *image_shape)).to(device)
                 each_worker_label[wid] = torch.empty(size=(0,)).to(device)
 
         # 打乱客户端顺序（num_workers 个）
         random_order = np.random.RandomState(seed=seed).permutation(num_workers)
         each_worker_data  = [each_worker_data[i]  for i in random_order]
         each_worker_label = [each_worker_label[i] for i in random_order]
-        return server_data, server_label, each_worker_data, each_worker_label
+        worker_indices = [worker_indices[i] for i in random_order]
+        result = (server_data, server_label, each_worker_data, each_worker_label)
+        if return_manifest:
+            return (*result, {"schema_version": 1, "seed": seed,
+                              "root_indices": server_indices,
+                              "client_indices": worker_indices})
+        return result
 
     else:
         raise NotImplementedError

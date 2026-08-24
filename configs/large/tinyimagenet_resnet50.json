@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "data": {"name": "tinyimagenet", "root": "./data", "download": false, "clients": 20, "server_pc": 400, "calibration_pc": 1000, "reference_bias": 0.005, "dirichlet_alpha": 0.5, "workers": 4, "reference_batch_size": 16},
+  "model": {"name": "resnet50-small", "num_classes": 200},
+  "training": {"rounds": 200, "batch_size": 16, "local_steps": 2, "test_batch_size": 128, "learning_rate": 0.001, "minimum_learning_rate": 0.00005, "lr_schedule": "cosine", "evaluation_every": 5, "seed": 1, "checkpoint_every": 5, "amp": true},
+  "protocol": {"aggregation": "rain", "calibration": "calibration/tinyimagenet_resnet50_sigma4.json", "chunk_size": 262144},
+  "privacy": {"clip_norm": 1.0, "noise_multiplier": 4.0, "delta": 0.00001},
+  "attack": {"name": "none", "malicious_clients": 0}
+}
