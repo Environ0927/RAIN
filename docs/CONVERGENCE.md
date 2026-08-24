@@ -73,3 +73,15 @@ python -m rain.cli.plot_convergence --inputs \
 
 During learning-rate selection, add `--metric validation_accuracy`. Final
 paper curves use the test metric after hyperparameters have been frozen.
+
+On the two-GPU group server, the selected seed-1 checkpoints can be resumed in
+two serial tracks so no two processes share one GPU:
+
+```bash
+scripts/group/run_convergence_seed1.sh primary 0
+scripts/group/run_convergence_seed1.sh baselines 1
+```
+
+The current validation-selected learning rates embedded in that launcher are
+RAIN `2e-4`, SignSGD `1e-4`, FedAvg `0.1`, and FLOD `2e-4`. Preserve the raw
+pilot directories and validation logs as tuning evidence.
