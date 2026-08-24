@@ -20,8 +20,23 @@ checkpointing. Protocol arithmetic remains exact NumPy integer/bit arithmetic.
 
 ## Data preparation
 
-CIFAR-100 downloads automatically through torchvision. FEMNIST must use the
-standard LEAF JSON representation in either of these equivalent layouts:
+CIFAR-100 downloads automatically through torchvision. FEMNIST can be
+downloaded from the SHA-256-pinned TensorFlow Federated release and converted
+into the bounded-memory cache with:
+
+```bash
+python -m rain.cli.prepare_femnist --root ./data
+```
+
+This obtains the 62-class writer-partitioned release (3,400 writers, 671,585
+training examples, and 77,483 test examples). It stores TFF's two HDF5 source
+files under `data/femnist/`, corrects TFF's background/ink orientation during
+cache conversion, and does not require TensorFlow. On an offline server, copy
+the archive or extracted HDF5 files first, extract the archive if needed, and
+run the command with `--offline`.
+
+The earlier standard LEAF JSON representation remains supported in either of
+these equivalent layouts:
 
 ```text
 data/femnist/data/train/*.json
@@ -37,7 +52,7 @@ loader converts the JSON into compressed uint8 shards under
 `data/femnist/processed/rain-femnist-v1/`. The cache is automatically rebuilt
 when a source shard's path, size, or modification time changes. It retains the
 original writer IDs and never converts FEMNIST into a synthetic Dirichlet
-partition.
+partition. The HDF5 path has the same writer-preservation guarantee.
 
 Tiny-ImageNet must be downloaded and extracted so one of these paths exists:
 

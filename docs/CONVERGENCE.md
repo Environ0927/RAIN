@@ -85,3 +85,36 @@ scripts/group/run_convergence_seed1.sh baselines 1
 The current validation-selected learning rates embedded in that launcher are
 RAIN `2e-4`, SignSGD `1e-4`, FedAvg `0.1`, and FLOD `2e-4`. Preserve the raw
 pilot directories and validation logs as tuning evidence.
+
+## FEMNIST continuation
+
+The FEMNIST convergence configs use the official 62-class TFF release, a
+3,246,270-parameter two-convolution CNN, 1,000 natural writer clients in the
+fixed population, and 100 randomly participating writers per round. They use
+the same four plaintext aggregation definitions, 1,000-round schedule,
+validation-only tuning, and final-only test evaluation as CIFAR-100. FEMNIST
+is naturally writer-partitioned and must not be described as Dirichlet data.
+
+Prepare the data before the GPUs become available:
+
+```bash
+python -m rain.cli.prepare_femnist --root ./data
+```
+
+Then calibrate the sigma-zero RAIN/FLOD threshold once:
+
+```bash
+python -m rain.cli.calibrate_large \
+  --config configs/convergence/femnist_rain.json --device cuda
+```
+
+After CIFAR-100 completes, use equal three-value learning-rate budgets on the
+two GPUs:
+
+```bash
+scripts/group/run_femnist_pilots_seed1.sh primary 0
+scripts/group/run_femnist_pilots_seed1.sh baselines 1
+```
+
+Select by round-100 held-out `validation_accuracy`, retain all pilot logs, and
+only then freeze the four learning rates for the 1,000-round runs.

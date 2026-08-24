@@ -64,6 +64,30 @@ def test_femnist_leaf_cache_preserves_writer_boundaries(tmp_path):
     assert prepare_femnist_cache(tmp_path, "train") == cache
 
 
+def test_femnist_tff_hdf5_cache_inverts_background_and_preserves_writers(tmp_path):
+    h5py = pytest.importorskip("h5py")
+    source_dir = tmp_path / "femnist"
+    source_dir.mkdir()
+    with h5py.File(source_dir / "fed_emnist_train.h5", "w") as stream:
+        examples = stream.create_group("examples")
+        for writer, label in (("writer-b", 61), ("writer-a", 0)):
+            group = examples.create_group(writer)
+            pixels = np.ones((1, 28, 28), dtype=np.float32)
+            pixels[0, 3, 4] = 0.0
+            group.create_dataset("pixels", data=pixels)
+            group.create_dataset("label", data=np.asarray([label], dtype=np.int32))
+    cache = prepare_femnist_cache(tmp_path, "train")
+    dataset = FEMNISTDataset(cache)
+    assert dataset.writer_ids == ("writer-a", "writer-b")
+    assert dataset.writer_indices == ((0,), (1,))
+    image, label = dataset[0]
+    values = np.asarray(image)
+    assert label == 0
+    assert values[3, 4] == 255
+    assert values[0, 0] == 0
+    assert prepare_femnist_cache(tmp_path, "train") == cache
+
+
 def test_femnist_partition_is_natural_and_writer_disjoint():
     writer_indices = tuple(tuple(range(index * 20, (index + 1) * 20)) for index in range(12))
     writer_ids = tuple(f"writer-{index}" for index in range(12))

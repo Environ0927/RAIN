@@ -21,9 +21,9 @@
   experiment configuration and should not be compared as identical attacks.
 - CIFAR-100 downloads automatically. Tiny-ImageNet licensing/distribution is
   not bundled, so reviewers must provide the extracted dataset directory.
-- FEMNIST is not downloaded automatically. Reviewers must provide standard
-  LEAF train/test JSON shards; the first-run conversion requires additional
-  disk space for the processed uint8 cache.
+- FEMNIST's automatic preparation requires the `experiment` dependency set
+  (including h5py) for the one-time conversion. Offline nodes must receive the
+  pinned TFF archive, its extracted HDF5 files, or an already-built cache.
 - Large full configs intentionally reference calibration files that are not
   fabricated by the repository. They must be produced from independent benign
   calibration data before reporting full results.

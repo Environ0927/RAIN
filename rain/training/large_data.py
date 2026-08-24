@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
+import shutil
+import tarfile
+import urllib.request
 from bisect import bisect_right
 from collections import OrderedDict
 from dataclasses import asdict, dataclass
@@ -10,6 +14,18 @@ from pathlib import Path
 from typing import Iterable
 
 import numpy as np
+
+
+FEMNIST_ARCHIVE_URL = (
+    "https://storage.googleapis.com/tff-datasets-public/fed_emnist.tar.bz2"
+)
+FEMNIST_ARCHIVE_SHA256 = (
+    "fe1ed5a502cea3a952eb105920bff8cffb32836b5173cb18a57a32c3606f3ea0"
+)
+FEMNIST_HDF5_NAMES = {
+    "train": "fed_emnist_train.h5",
+    "test": "fed_emnist_test.h5",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +98,85 @@ def _femnist_split_files(root: str | Path, split: str) -> tuple[Path, list[Path]
     )
 
 
+def _femnist_base(root: str | Path) -> Path:
+    configured = Path(root)
+    return configured if configured.name.lower() == "femnist" else configured / "femnist"
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def download_femnist(root: str | Path, *, allow_download: bool = True) -> tuple[Path, Path]:
+    """Download and safely extract TFF's writer-partitioned 62-class FEMNIST.
+
+    The archive is content-pinned. Existing extracted HDF5 files are reused, so
+    offline experiment nodes only need the two files copied into ``data/femnist``.
+    """
+
+    base = _femnist_base(root)
+    base.mkdir(parents=True, exist_ok=True)
+    targets = tuple(base / FEMNIST_HDF5_NAMES[split] for split in ("train", "test"))
+    if all(path.is_file() for path in targets):
+        return targets
+
+    archive = base / "fed_emnist.tar.bz2"
+    if not archive.is_file():
+        if not allow_download:
+            raise FileNotFoundError(
+                f"offline FEMNIST preparation requires {archive} or both extracted HDF5 files"
+            )
+        temporary = base / f".{archive.name}.{os.getpid()}.download"
+        try:
+            with urllib.request.urlopen(FEMNIST_ARCHIVE_URL) as source, temporary.open("wb") as output:
+                shutil.copyfileobj(source, output, length=1024 * 1024)
+            if _sha256(temporary) != FEMNIST_ARCHIVE_SHA256:
+                raise ValueError("downloaded FEMNIST archive failed SHA-256 verification")
+            temporary.replace(archive)
+        finally:
+            temporary.unlink(missing_ok=True)
+    elif _sha256(archive) != FEMNIST_ARCHIVE_SHA256:
+        raise ValueError(f"existing FEMNIST archive failed SHA-256 verification: {archive}")
+
+    with tarfile.open(archive, "r:bz2") as bundle:
+        members = {member.name: member for member in bundle.getmembers()}
+        for target in targets:
+            member = members.get(target.name)
+            if member is None or not member.isfile():
+                raise ValueError(f"FEMNIST archive is missing {target.name}")
+            source = bundle.extractfile(member)
+            if source is None:
+                raise ValueError(f"unable to extract {target.name}")
+            temporary = base / f".{target.name}.{os.getpid()}.tmp"
+            try:
+                with source, temporary.open("wb") as output:
+                    shutil.copyfileobj(source, output, length=1024 * 1024)
+                temporary.replace(target)
+            finally:
+                temporary.unlink(missing_ok=True)
+    return targets
+
+
+def _femnist_hdf5_file(root: str | Path, split: str) -> tuple[Path, Path]:
+    if split not in FEMNIST_HDF5_NAMES:
+        raise ValueError("FEMNIST split must be train or test")
+    configured = Path(root)
+    candidates = [
+        _femnist_base(configured) / FEMNIST_HDF5_NAMES[split],
+        configured / FEMNIST_HDF5_NAMES[split],
+    ]
+    for path in candidates:
+        if path.is_file():
+            return path.parent, path
+    raise FileNotFoundError(
+        f"Federated EMNIST HDF5 split not found; expected {candidates[0]}"
+    )
+
+
 def _source_signature(files: Iterable[Path]) -> list[dict[str, object]]:
     return [
         {"path": str(path.resolve()), "size": path.stat().st_size,
@@ -115,7 +210,13 @@ def prepare_femnist_cache(root: str | Path, split: str) -> Path:
 
     if split not in ("train", "test"):
         raise ValueError("FEMNIST split must be train or test")
-    base, source_files = _femnist_split_files(root, split)
+    try:
+        base, source_files = _femnist_split_files(root, split)
+    except FileNotFoundError as json_error:
+        try:
+            return _prepare_femnist_hdf5_cache(root, split)
+        except FileNotFoundError:
+            raise json_error
     cache_dir = base / "processed" / "rain-femnist-v1" / split
     manifest_path = cache_dir / "manifest.json"
     signature = _source_signature(source_files)
@@ -186,6 +287,95 @@ def prepare_femnist_cache(root: str | Path, split: str) -> Path:
         "schema_version": 1, "split": split, "sources": signature,
         "sample_count": global_offset, "writers": writers,
         "writer_ranges": writer_ranges, "shards": shards,
+    }
+    temporary_manifest = cache_dir / f".manifest.{os.getpid()}.json.tmp"
+    temporary_manifest.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    temporary_manifest.replace(manifest_path)
+    return cache_dir
+
+
+def _prepare_femnist_hdf5_cache(root: str | Path, split: str) -> Path:
+    """Convert the official TFF HDF5 release into the bounded-memory cache."""
+
+    base, source = _femnist_hdf5_file(root, split)
+    cache_dir = base / "processed" / "rain-femnist-v1" / split
+    manifest_path = cache_dir / "manifest.json"
+    # Use a location-independent signature so a prepared cache can be copied
+    # from a connected staging host to an offline experiment server.
+    signature = _source_signature([source])
+    signature[0]["path"] = source.name
+    signature[0].pop("mtime_ns", None)
+    if manifest_path.exists():
+        try:
+            existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+            shards_exist = all((cache_dir / item["file"]).is_file() for item in existing["shards"])
+            if existing.get("schema_version") == 1 and existing.get("sources") == signature and shards_exist:
+                return cache_dir
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            pass
+
+    try:
+        import h5py
+    except ImportError as error:
+        raise RuntimeError(
+            "h5py is required once to prepare FEMNIST; install the experiment dependencies"
+        ) from error
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    writers: list[str] = []
+    writer_ranges: list[list[list[int]]] = []
+    shards: list[dict[str, object]] = []
+    global_offset = 0
+    writers_per_shard = 100
+    with h5py.File(source, "r") as stream:
+        if "examples" not in stream:
+            raise ValueError(f"invalid TFF FEMNIST HDF5 file: {source}")
+        examples = stream["examples"]
+        writer_names = sorted(str(value) for value in examples.keys())
+        for shard_number, first in enumerate(range(0, len(writer_names), writers_per_shard)):
+            image_rows: list[np.ndarray] = []
+            target_rows: list[np.ndarray] = []
+            local_offset = 0
+            for writer in writer_names[first:first + writers_per_shard]:
+                record = examples[writer]
+                pixels = np.asarray(record["pixels"], dtype=np.float32)
+                targets = np.asarray(record["label"], dtype=np.int64)
+                if pixels.ndim != 3 or pixels.shape[1:] != (28, 28):
+                    raise ValueError(f"invalid FEMNIST image shape for writer {writer!r}")
+                if targets.ndim != 1 or len(pixels) != len(targets):
+                    raise ValueError(f"FEMNIST image/label count mismatch for writer {writer!r}")
+                if len(targets) and (targets.min() < 0 or targets.max() >= 62):
+                    raise ValueError(f"FEMNIST labels must lie in [0, 61] for writer {writer!r}")
+                if not np.all(np.isfinite(pixels)) or np.any((pixels < 0) | (pixels > 1)):
+                    raise ValueError(f"invalid FEMNIST pixels for writer {writer!r}")
+                # TFF stores 1 for background and 0 for ink. The PyTorch path
+                # uses the conventional MNIST orientation before normalization.
+                images = np.rint((1.0 - pixels) * 255.0).astype(np.uint8)
+                writers.append(writer)
+                writer_ranges.append([[global_offset + local_offset, len(targets)]])
+                image_rows.append(images)
+                target_rows.append(targets)
+                local_offset += len(targets)
+            images = np.concatenate(image_rows) if image_rows else np.empty((0, 28, 28), dtype=np.uint8)
+            targets = np.concatenate(target_rows) if target_rows else np.empty(0, dtype=np.int64)
+            shard_name = f"shard-{shard_number:05d}.npz"
+            temporary = cache_dir / f".{shard_name}.{os.getpid()}.tmp.npz"
+            np.savez_compressed(temporary, images=images, targets=targets)
+            temporary.replace(cache_dir / shard_name)
+            shards.append({"file": shard_name, "start": global_offset, "count": len(targets)})
+            global_offset += len(targets)
+    if global_offset == 0:
+        raise ValueError(f"FEMNIST {split} split contains no examples")
+    manifest = {
+        "schema_version": 1,
+        "split": split,
+        "source_format": "tff-hdf5",
+        "pixel_encoding": "uint8-background-zero",
+        "sources": signature,
+        "sample_count": global_offset,
+        "writers": writers,
+        "writer_ranges": writer_ranges,
+        "shards": shards,
     }
     temporary_manifest = cache_dir / f".manifest.{os.getpid()}.json.tmp"
     temporary_manifest.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -322,9 +512,7 @@ def load_large_dataset(
         return DatasetBundle(train, reference, test, np.asarray(train.targets, dtype=np.int64), 200, (3, 64, 64))
     if normalized == "femnist":
         if download:
-            raise ValueError(
-                "FEMNIST cannot be downloaded by torchvision; provide LEAF JSON files and set download=false"
-            )
+            download_femnist(root)
         train_cache = prepare_femnist_cache(root, "train")
         test_cache = prepare_femnist_cache(root, "test")
         train = FEMNISTDataset(train_cache, transform=_transforms("femnist", training=True))

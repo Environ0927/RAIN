@@ -23,6 +23,7 @@ experiment = [
   "matplotlib>=3.6",
   "scipy>=1.9",
   "scikit-learn>=1.1",
+  "h5py>=3.8",
   "hdbscan>=0.8",
 ]
 
@@ -39,6 +40,7 @@ rain-make-sweep = "rain.cli.make_sweep:main"
 rain-calibrate-large = "rain.cli.calibrate_large:main"
 rain-summarize = "rain.cli.summarize:main"
 rain-plot-convergence = "rain.cli.plot_convergence:main"
+rain-prepare-femnist = "rain.cli.prepare_femnist:main"
 
 [tool.setuptools.packages.find]
 include = ["rain*"]

@@ -84,8 +84,25 @@ def main() -> None:
     loss_fn = nn.CrossEntropyLoss(); workers = int(data.get("workers", 0))
     calibration_clients = min(int(data["clients"]), calibration_size)
     calibration_indices = np.asarray(partition.calibration_indices, dtype=np.int64)
+    calibration_client_ids: list[str] = []
     if name == "femnist":
-        groups = np.array_split(calibration_indices, calibration_clients)
+        calibration_set = set(int(value) for value in calibration_indices)
+        natural_groups = [
+            (writer_id, np.asarray(
+                [int(value) for value in writer_values if int(value) in calibration_set],
+                dtype=np.int64,
+            ))
+            for writer_id, writer_values in zip(
+                bundle.natural_client_ids, bundle.natural_client_indices
+            )
+        ]
+        natural_groups = [item for item in natural_groups if len(item[1])]
+        if len(natural_groups) < calibration_clients:
+            raise ValueError("FEMNIST calibration split covers too few natural writers")
+        rng = np.random.default_rng(seed + 9_001)
+        selected = rng.choice(len(natural_groups), size=calibration_clients, replace=False)
+        calibration_client_ids = [natural_groups[int(index)][0] for index in selected]
+        groups = [natural_groups[int(index)][1] for index in selected]
     else:
         groups = _dirichlet_calibration_groups(
             calibration_indices, bundle.targets, clients=calibration_clients,
@@ -126,7 +143,9 @@ def main() -> None:
         "root_indices": list(partition.root_indices),
         "calibration_indices": list(partition.calibration_indices),
         "client_ids": list(partition.client_ids), "partition_kind": partition.partition_kind,
-        "calibration_clients": calibration_clients, "output": str(target),
+        "calibration_clients": calibration_clients,
+        "calibration_client_ids": calibration_client_ids,
+        "output": str(target),
     }
     manifest_path = target.with_suffix(target.suffix + ".manifest.json")
     manifest_path.parent.mkdir(parents=True, exist_ok=True)

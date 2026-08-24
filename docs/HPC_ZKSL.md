@@ -68,8 +68,10 @@ sbatch --export=ALL,MODE=train,CONFIG=configs/quick/cifar100_resnet34.json,OUTPU
 
 Add `--partition=A800-N` before `--export` when submitting on East China.
 
-FEMNIST and Tiny-ImageNet are not downloaded automatically. Upload them to the
-same Northwest-1 cluster storage used by the job:
+Tiny-ImageNet is not downloaded automatically. For FEMNIST, connected hosts
+can run `python -m rain.cli.prepare_femnist --root ./data`; offline compute
+nodes must receive the pinned TFF archive/HDF5 files or LEAF JSON shards in
+the same cluster storage used by the job:
 
 ```text
 data/femnist/data/train/*.json
