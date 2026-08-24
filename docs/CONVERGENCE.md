@@ -41,6 +41,15 @@ scripts/group/run_cifar10_pilots_seed1.sh primary 0
 scripts/group/run_cifar10_pilots_seed1.sh baselines 1
 ```
 
+On the group server, the handoff can be queued while the retained CIFAR-100
+runs are still finishing. It waits until all four raw logs contain 1,000 rows,
+then calibrates once and starts the two pilot tracks:
+
+```bash
+nohup scripts/group/queue_cifar10_after_cifar100.sh \
+  > outputs/convergence/cifar10-queue.log 2>&1 &
+```
+
 The three server-step candidates are `1e-4`, `2e-4`, and `5e-4` for RAIN,
 SignSGD, and FLOD; FedAvg uses server interpolation candidates 0.5, 1.0, and
 1.5. All methods share the client optimizer and candidate-count budget.
