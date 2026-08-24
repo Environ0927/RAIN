@@ -50,9 +50,33 @@ nohup scripts/group/queue_cifar10_after_cifar100.sh \
   > outputs/convergence/cifar10-queue.log 2>&1 &
 ```
 
-The three server-step candidates are `1e-4`, `2e-4`, and `5e-4` for RAIN,
-SignSGD, and FLOD; FedAvg uses server interpolation candidates 0.5, 1.0, and
-1.5. All methods share the client optimizer and candidate-count budget.
+The initial three server-step candidates are `1e-4`, `2e-4`, and `5e-4` for
+RAIN, SignSGD, and FLOD; FedAvg uses server interpolation candidates 0.5, 1.0,
+and 1.5. Because the seed-1 pilot placed all three sign-based methods at the
+upper grid boundary, the preregistered refinement adds `1e-3` and `2e-3` to
+each of those methods. FedAvg receives the same total candidate count by adding
+0.75 and 1.25. This produces five retained candidates per method.
+
+The paper's Figure 4 comparison is MNIST/FMNIST with Shuffle-DP at
+`epsilon_0=10`. It does not imply that SignSGD must be weak in this separate
+CIFAR-10 plaintext, sigma-zero experiment. Do not change a baseline merely to
+force the Figure 4 ordering.
+
+Start the auditable refinement-to-formal pipeline on the two-GPU group server:
+
+```bash
+nohup scripts/group/queue_cifar10_formal.sh \
+  > outputs/convergence/cifar10-formal-queue.log 2>&1 &
+```
+
+The queue selects each method's learning rate by validation accuracy only,
+then runs seeds 1, 2, and 3 for 1,000 rounds. `data.partition_seed=1` keeps the
+root, calibration, validation, and client partitions identical across seeds;
+the training seed still changes initialization, client sampling, minibatches,
+and augmentation. Test accuracy remains withheld until the final round. The
+queue writes `cifar10-formal-summary.json` and a validation-convergence figure
+with mean and one-standard-deviation bands. Raw logs and the complete tuning
+selection record are retained.
 
 ## Method definitions
 

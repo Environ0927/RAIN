@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import defaultdict
 from pathlib import Path
+import numpy as np
 
 
 def _parse_spec(value: str) -> tuple[str, Path]:
@@ -29,6 +31,17 @@ def load_curve(path: Path, metric: str = "accuracy") -> tuple[list[int], list[fl
     )
 
 
+def aggregate_curves(
+    paths: list[Path], metric: str = "accuracy",
+) -> tuple[list[int], np.ndarray, np.ndarray]:
+    curves = [load_curve(path, metric) for path in paths]
+    rounds = curves[0][0]
+    if any(value[0] != rounds for value in curves[1:]):
+        raise ValueError("seed curves must use the same evaluated rounds")
+    matrix = np.asarray([value[1] for value in curves], dtype=np.float64)
+    return rounds, matrix.mean(axis=0), matrix.std(axis=0)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--inputs", nargs="+", required=True, type=_parse_spec)
@@ -39,9 +52,17 @@ def main() -> None:
     import matplotlib.pyplot as pyplot
 
     figure, axis = pyplot.subplots(figsize=(6.4, 4.2))
+    grouped: dict[str, list[Path]] = defaultdict(list)
     for label, path in args.inputs:
-        rounds, accuracy = load_curve(path, args.metric)
-        axis.plot(rounds, accuracy, label=label, linewidth=1.8)
+        grouped[label].append(path)
+    for label, paths in grouped.items():
+        rounds, mean, std = aggregate_curves(paths, args.metric)
+        line = axis.plot(rounds, mean, label=label, linewidth=1.8)[0]
+        if len(paths) > 1:
+            axis.fill_between(
+                rounds, mean - std, mean + std,
+                color=line.get_color(), alpha=.16, linewidth=0,
+            )
     ylabel = "Validation accuracy" if args.metric == "validation_accuracy" else "Test accuracy"
     axis.set(xlabel="Communication round", ylabel=ylabel, title=args.title)
     axis.grid(alpha=.25); axis.legend(); figure.tight_layout()

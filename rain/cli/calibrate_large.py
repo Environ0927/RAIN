@@ -61,7 +61,9 @@ def main() -> None:
     calibration_size = int(data.get("calibration_pc", 0))
     if calibration_size < 1:
         raise ValueError("data.calibration_pc must reserve independent examples")
-    seed = int(training["seed"]); random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
+    seed = int(training["seed"])
+    partition_seed = int(data.get("partition_seed", seed))
+    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
     device = torch.device(args.device if args.device != "cuda" or torch.cuda.is_available() else "cpu")
     bundle = load_large_dataset(name, root=data.get("root", "./data"), download=bool(data.get("download", True)))
     if name == "femnist":
@@ -73,7 +75,7 @@ def main() -> None:
             root_size=int(data["server_pc"]),
             calibration_size=calibration_size,
             validation_size=int(data.get("validation_pc", 0)),
-            root_bias=float(data.get("reference_bias", 1 / 62)), seed=seed,
+            root_bias=float(data.get("reference_bias", 1 / 62)), seed=partition_seed,
             minimum_client_size=int(data.get("minimum_client_size", 2)),
         )
     else:
@@ -82,7 +84,7 @@ def main() -> None:
             root_size=int(data["server_pc"]),
             calibration_size=calibration_size, root_bias=float(data.get("reference_bias", .1)),
             validation_size=int(data.get("validation_pc", 0)),
-            dirichlet_alpha=float(data.get("dirichlet_alpha", .5)), seed=seed,
+            dirichlet_alpha=float(data.get("dirichlet_alpha", .5)), seed=partition_seed,
             minimum_client_size=int(data.get("minimum_client_size", 2)),
         )
     model = _model(config["model"]["name"], int(np.prod(bundle.input_shape)), bundle.classes).to(device)

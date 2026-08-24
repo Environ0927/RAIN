@@ -65,17 +65,43 @@ def _write(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _prepare_raw_log(path: Path, *, start_round: int, resume: bool) -> None:
+    """Keep a JSONL log consistent with the checkpoint used for this run."""
+    if not path.exists() or path.stat().st_size == 0:
+        if resume and start_round:
+            raise ValueError("resume checkpoint has no matching rounds.jsonl history")
+        return
+    rows = [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    if not resume:
+        raise ValueError("output already contains rounds.jsonl; use --resume or a new output directory")
+    retained = [row for row in rows if int(row["round"]) < start_round]
+    if [int(row["round"]) for row in retained] != list(range(start_round)):
+        raise ValueError("rounds.jsonl does not contain a contiguous history for the checkpoint")
+    path.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in retained),
+        encoding="utf-8",
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True); parser.add_argument("--output", default="outputs/run")
     parser.add_argument("--resume"); parser.add_argument("--device", default="cpu")
     parser.add_argument("--learning-rate", type=float)
+    parser.add_argument("--seed", type=int)
     parser.add_argument("--stop-after", type=int)
     args = parser.parse_args(); config = load_config(args.config)
     if args.learning_rate is not None:
         if not np.isfinite(args.learning_rate) or args.learning_rate <= 0:
             raise ValueError("--learning-rate must be finite and positive")
         config["training"]["learning_rate"] = float(args.learning_rate)
+    if args.seed is not None:
+        if args.seed < 0:
+            raise ValueError("--seed must be non-negative")
+        config["training"]["seed"] = int(args.seed)
     configured_rounds = int(config["training"]["rounds"])
     stop_round = configured_rounds if args.stop_after is None else int(args.stop_after)
     if not 1 <= stop_round <= configured_rounds:
@@ -97,7 +123,9 @@ def main():
         "preprocessing", "clip_noise" if backend == "secure" else "none"
     )).lower()
     device = torch.device(args.device if args.device != "cuda" or torch.cuda.is_available() else "cpu")
-    seed = int(training["seed"]); random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
+    seed = int(training["seed"])
+    partition_seed = int(data.get("partition_seed", seed))
+    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
     if torch.cuda.is_available(): torch.cuda.manual_seed_all(seed)
     try: commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     except (OSError, subprocess.CalledProcessError): commit = "unavailable"
@@ -127,7 +155,7 @@ def main():
                 root_size=int(data["server_pc"]),
                 calibration_size=int(data.get("calibration_pc", 0)),
                 validation_size=int(data.get("validation_pc", 0)),
-                root_bias=float(data.get("reference_bias", 1 / 62)), seed=seed,
+                root_bias=float(data.get("reference_bias", 1 / 62)), seed=partition_seed,
                 minimum_client_size=int(data.get("minimum_client_size", 2)),
             )
         else:
@@ -137,7 +165,7 @@ def main():
                 calibration_size=int(data.get("calibration_pc", 0)),
                 validation_size=int(data.get("validation_pc", 0)),
                 root_bias=float(data.get("reference_bias", .1)),
-                dirichlet_alpha=float(data.get("dirichlet_alpha", .5)), seed=seed,
+                dirichlet_alpha=float(data.get("dirichlet_alpha", .5)), seed=partition_seed,
                 minimum_client_size=int(data.get("minimum_client_size", 2)),
             )
         partition.save(output / "data_split.json")
@@ -234,6 +262,7 @@ def main():
     if start_round >= stop_round:
         raise ValueError("checkpoint next_round must be smaller than --stop-after")
     raw_path = output / "rounds.jsonl"
+    _prepare_raw_log(raw_path, start_round=start_round, resume=bool(args.resume))
     for round_id in range(start_round, stop_round):
         started = time.perf_counter(); updates = []; local_results = []
         model.train(); batch_size = int(training["batch_size"])

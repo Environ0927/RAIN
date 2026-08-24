@@ -41,6 +41,7 @@ rain-calibrate-large = "rain.cli.calibrate_large:main"
 rain-summarize = "rain.cli.summarize:main"
 rain-plot-convergence = "rain.cli.plot_convergence:main"
 rain-prepare-femnist = "rain.cli.prepare_femnist:main"
+rain-select-tuning = "rain.cli.select_tuning:main"
 
 [tool.setuptools.packages.find]
 include = ["rain*"]
