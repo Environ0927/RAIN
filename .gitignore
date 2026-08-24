@@ -35,6 +35,8 @@ ENV/
 # Logs / Temp
 ############################
 *.log
+slurm-*.out
+slurm-*.err
 tmp/
 temp/
 .cache/

@@ -65,6 +65,9 @@ See [large-scale experiments](docs/LARGE_SCALE.md) before starting the full
 configs; FEMNIST uses standard LEAF JSON shards, Tiny-ImageNet is a manual
 download, and full runs require an independent calibration file.
 
+For the Zhongke Suanlian Cloud Slurm setup, use the checked-in
+[GPU job scripts and cluster walkthrough](docs/HPC_ZKSL.md).
+
 ## Main entry point and compatibility
 
 The retained trainer also routes `--aggregation rain` to the new
