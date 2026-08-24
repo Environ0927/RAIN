@@ -1,7 +1,7 @@
 """Reviewer/full PyTorch trainer driven by a versioned artifact config."""
 from __future__ import annotations
 
-import argparse, json, platform, random, shutil, subprocess, sys, time
+import argparse, json, platform, random, subprocess, sys, time
 from pathlib import Path
 import numpy as np
 from rain.config import load_config
@@ -69,9 +69,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True); parser.add_argument("--output", default="outputs/run")
     parser.add_argument("--resume"); parser.add_argument("--device", default="cpu")
+    parser.add_argument("--learning-rate", type=float)
+    parser.add_argument("--stop-after", type=int)
     args = parser.parse_args(); config = load_config(args.config)
+    if args.learning_rate is not None:
+        if not np.isfinite(args.learning_rate) or args.learning_rate <= 0:
+            raise ValueError("--learning-rate must be finite and positive")
+        config["training"]["learning_rate"] = float(args.learning_rate)
+    configured_rounds = int(config["training"]["rounds"])
+    stop_round = configured_rounds if args.stop_after is None else int(args.stop_after)
+    if not 1 <= stop_round <= configured_rounds:
+        raise ValueError("--stop-after must lie in [1, training.rounds]")
     output = Path(args.output); output.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(args.config, output / "config.json")
+    _write(output / "config.json", config)
 
     import torch
     import torch.nn as nn
@@ -94,7 +104,7 @@ def main():
     _write(output / "environment.json", {"python": sys.version, "torch": torch.__version__,
            "numpy": np.__version__, "platform": platform.platform(), "git_commit": commit,
            "device": str(device), "aggregation": aggregation, "backend": backend,
-           "preprocessing": preprocessing})
+           "preprocessing": preprocessing, "stop_after": stop_round})
 
     data_name = data["name"].lower().replace("-", "")
     large_data = data_name in ("femnist", "cifar100", "tinyimagenet", "tinyimagenet200")
@@ -178,7 +188,7 @@ def main():
     privacy_report = None
     if privacy_enabled:
         privacy_report = account_privacy(
-            participating_clients=int(data["clients"]), rounds=int(training["rounds"]),
+            participating_clients=int(data["clients"]), rounds=stop_round,
             clip_norm=float(privacy["clip_norm"]), noise_multiplier=float(privacy["noise_multiplier"]),
             delta=float(privacy.get("delta", 1e-5)),
         )
@@ -201,8 +211,10 @@ def main():
         batch_rng.bit_generator.state = checkpoint["batch_rng"]; torch.set_rng_state(checkpoint["torch_rng"])
         if device.type == "cuda" and checkpoint.get("cuda_rng") is not None:
             torch.cuda.set_rng_state_all(checkpoint["cuda_rng"])
+    if start_round >= stop_round:
+        raise ValueError("checkpoint next_round must be smaller than --stop-after")
     raw_path = output / "rounds.jsonl"
-    for round_id in range(start_round, int(training["rounds"])):
+    for round_id in range(start_round, stop_round):
         started = time.perf_counter(); updates = []; model.train(); batch_size = int(training["batch_size"])
         local_steps = int(training.get("local_steps", 1))
         if local_steps < 1:
@@ -316,12 +328,14 @@ def main():
             for parameter in model.parameters():
                 count = parameter.numel(); update = direction[offset:offset + count].reshape(parameter.shape)
                 parameter.sub_(effective_lr * update.to(device)); offset += count
-        final_round = round_id + 1 == int(training["rounds"])
+        final_round = round_id + 1 == configured_rounds
         validation_now = validation_loader is not None and (
             (round_id + 1) % int(training.get("evaluation_every", 1)) == 0 or final_round
         )
         test_every = int(training.get("test_evaluation_every", training.get("evaluation_every", 1)))
-        test_now = (round_id + 1) % test_every == 0 or final_round
+        test_now = bool(training.get("evaluate_test", True)) and (
+            (round_id + 1) % test_every == 0 or final_round
+        )
         evaluation = _evaluate(model, test_loader, device, classes) if test_now else {
             "loss": None, "accuracy": None, "balanced_accuracy": None
         }
@@ -344,7 +358,8 @@ def main():
         with raw_path.open("a", encoding="utf-8") as stream: stream.write(json.dumps(row, sort_keys=True) + "\n")
         print(json.dumps(row, sort_keys=True))
         every = int(training.get("checkpoint_every", 0))
-        if every and (round_id + 1) % every == 0:
+        save_at_pilot_boundary = round_id + 1 == stop_round and stop_round < configured_rounds
+        if (every and (round_id + 1) % every == 0) or save_at_pilot_boundary:
             torch.save({"schema_version": 1, "model": model.state_dict(), "next_round": round_id + 1,
                 "batch_rng": batch_rng.bit_generator.state, "torch_rng": torch.get_rng_state(),
                 "cuda_rng": torch.cuda.get_rng_state_all() if device.type == "cuda" else None,

@@ -53,6 +53,12 @@ result, apply the same small candidate-grid size to every method, freeze the
 selected values, then run at least three seeds. Report every method, including
 a FLOD result that is stronger than RAIN.
 
+Use `--stop-after 100 --learning-rate VALUE` for each pilot. The resolved
+learning rate is written into the run's `config.json`, the pilot stops with a
+resumable checkpoint, and test accuracy remains unevaluated because round 100
+is not the configured final round. Use the same number of candidate values for
+every method.
+
 Plot only from raw JSONL logs:
 
 ```bash
