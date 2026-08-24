@@ -24,6 +24,9 @@ class PlaintextAggregationMetrics:
     accepted_clients: int | None
     weight_sum: float | None
     threshold_count: int | None
+    mismatch_mean: float | None
+    mismatch_min: float | None
+    mismatch_max: float | None
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -136,6 +139,9 @@ def aggregate_plaintext(
     accepted_clients: int | None = None
     weight_sum: float | None = None
     threshold: int | None = None
+    mismatch_mean: float | None = None
+    mismatch_min: float | None = None
+    mismatch_max: float | None = None
 
     if method == "fedavg":
         if client_weights is None:
@@ -155,6 +161,14 @@ def aggregate_plaintext(
             raise ValueError(f"{method} requires reference_bits and tau")
         bits = _sign_bits(processed)
         weights, threshold = _reference_weights(bits, reference_bits, float(tau))
+        reference = np.asarray(reference_bits, dtype=np.uint8).reshape(-1)
+        mismatch = np.asarray(
+            [np.count_nonzero(row != reference) / bits.shape[1] for row in bits],
+            dtype=np.float64,
+        )
+        mismatch_mean = float(np.mean(mismatch))
+        mismatch_min = float(np.min(mismatch))
+        mismatch_max = float(np.max(mismatch))
         accepted_clients = int(np.count_nonzero(weights))
         weight_sum = float(weights.sum())
         accumulator = np.zeros(bits.shape[1], dtype=np.float64)
@@ -176,5 +190,8 @@ def aggregate_plaintext(
             accepted_clients=accepted_clients,
             weight_sum=weight_sum,
             threshold_count=threshold,
+            mismatch_mean=mismatch_mean,
+            mismatch_min=mismatch_min,
+            mismatch_max=mismatch_max,
         ),
     )

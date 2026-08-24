@@ -293,6 +293,9 @@ def main():
                 "accepted_clients": plain_metrics.accepted_clients,
                 "weight_sum": plain_metrics.weight_sum,
                 "threshold_count": plain_metrics.threshold_count,
+                "mismatch_mean": plain_metrics.mismatch_mean,
+                "mismatch_min": plain_metrics.mismatch_min,
+                "mismatch_max": plain_metrics.mismatch_max,
             }
         base_lr = float(training["learning_rate"])
         if training.get("lr_schedule", "constant") == "cosine":

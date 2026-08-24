@@ -9,6 +9,33 @@ from rain.config import load_config
 from rain.privacy import calibrate_threshold
 
 
+def _dirichlet_calibration_groups(
+    indices: np.ndarray,
+    targets: np.ndarray,
+    *,
+    clients: int,
+    alpha: float,
+    seed: int,
+) -> list[np.ndarray]:
+    """Partition held-out calibration examples like non-IID training clients."""
+    rng = np.random.default_rng(seed)
+    labels = np.asarray(targets, dtype=np.int64)
+    groups: list[list[int]] = [[] for _ in range(clients)]
+    for label in np.unique(labels[indices]):
+        values = indices[labels[indices] == label].copy(); rng.shuffle(values)
+        counts = rng.multinomial(len(values), rng.dirichlet(np.full(clients, alpha)))
+        cursor = 0
+        for client, count in enumerate(counts):
+            groups[client].extend(values[cursor:cursor + count].tolist()); cursor += count
+    for client in range(clients):
+        while not groups[client]:
+            donor = max(range(clients), key=lambda value: len(groups[value]))
+            if len(groups[donor]) < 2:
+                raise ValueError("calibration split is too small for the client count")
+            groups[client].append(groups[donor].pop())
+    return [np.asarray(group, dtype=np.int64) for group in groups]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
@@ -55,19 +82,21 @@ def main() -> None:
         )
     model = _model(config["model"]["name"], int(np.prod(bundle.input_shape)), bundle.classes).to(device)
     loss_fn = nn.CrossEntropyLoss(); workers = int(data.get("workers", 0))
-    reference = LoaderReferenceProvider(
-        bundle.reference, partition.root_indices, loss_fn=loss_fn, device=device,
-        batch_size=int(data.get("reference_batch_size", 32)), workers=workers, seed=seed,
-    ).direction(model)
-
     calibration_clients = min(int(data["clients"]), calibration_size)
-    groups = np.array_split(np.asarray(partition.calibration_indices, dtype=np.int64), calibration_clients)
+    calibration_indices = np.asarray(partition.calibration_indices, dtype=np.int64)
+    if name == "femnist":
+        groups = np.array_split(calibration_indices, calibration_clients)
+    else:
+        groups = _dirichlet_calibration_groups(
+            calibration_indices, bundle.targets, clients=calibration_clients,
+            alpha=float(data.get("dirichlet_alpha", .5)), seed=seed + 9_001,
+        )
     update_rows = []
-    batch_size = int(training["batch_size"]); model.eval()
+    batch_size = int(training["batch_size"]); model.train()
     for group in groups:
         model.zero_grad(set_to_none=True)
         loader = DataLoader(
-            Subset(bundle.reference, group.tolist()), batch_size=batch_size, shuffle=False,
+            Subset(bundle.train, group.tolist()), batch_size=batch_size, shuffle=False,
             num_workers=workers, pin_memory=device.type == "cuda",
             generator=torch.Generator().manual_seed(seed),
         )
@@ -77,6 +106,13 @@ def main() -> None:
         update_rows.append(
             torch.cat([parameter.grad.detach().reshape(-1) for parameter in model.parameters()]).cpu().numpy()
         )
+    # The trainer computes the per-round reference after client forwards, so
+    # BatchNorm running statistics and augmentation effects must be represented
+    # in calibration as well.
+    reference = LoaderReferenceProvider(
+        bundle.reference, partition.root_indices, loss_fn=loss_fn, device=device,
+        batch_size=int(data.get("reference_batch_size", 32)), workers=workers, seed=seed,
+    ).direction(model)
     record = calibrate_threshold(
         np.stack(update_rows), reference, clip_norm=float(privacy["clip_norm"]),
         noise_multiplier=float(privacy["noise_multiplier"]), quantile=args.quantile,
