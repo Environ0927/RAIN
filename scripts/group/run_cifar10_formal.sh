@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
-    echo "usage: run_cifar10_formal.sh primary-or-baselines selection.json [gpu-index]" >&2
+    echo "usage: run_cifar10_formal.sh primary-or-baselines-or-method selection.json [gpu-index]" >&2
     exit 2
 fi
 track="$1"
@@ -53,6 +53,9 @@ case "$track" in
     baselines)
         run_method fedavg
         run_method flod
+        ;;
+    rain|signsgd|fedavg|flod)
+        run_method "$track"
         ;;
     *)
         echo "unknown track: $track (expected primary or baselines)" >&2
