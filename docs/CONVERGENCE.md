@@ -78,6 +78,20 @@ queue writes `cifar10-formal-summary.json` and a validation-convergence figure
 with mean and one-standard-deviation bands. Raw logs and the complete tuning
 selection record are retained.
 
+### Single-seed noise probe
+
+The optional exploratory probe applies the same `L2` clipping (`C=1`) and
+coordinate-wise Gaussian perturbation (`noise_multiplier=5e-5`) to all four
+methods. It freezes the clean-validation-selected learning rates and runs seed
+1 only. Because this very small perturbation does not provide a meaningful DP
+budget, these outputs are utility-sensitivity evidence and must not be labeled
+as a formal Shuffle-DP result.
+
+```bash
+nohup scripts/group/run_cifar10_noise5e-5_seed1.sh 1 \
+  > outputs/convergence/explore-cifar10-noise5e-5-queue.log 2>&1 &
+```
+
 ## Method definitions
 
 - `rain`: reference-Hamming ReLU weights followed by a coordinate sign.
