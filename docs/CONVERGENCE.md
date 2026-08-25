@@ -214,3 +214,14 @@ four 1,000-round seed-1 runs:
 nohup scripts/group/queue_femnist_seed1.sh \
   > outputs/convergence/femnist-seed1-queue.log 2>&1 &
 ```
+
+The separate fixed-learning-rate sensitivity launcher runs two seeds using
+FedAvg `0.02`, RAIN `2e-4`, SignSGD `5e-5`, and FLOD `5e-5`. These values were
+specified after observing the pilot results and are not validation-optimal for
+every method. The launcher records that provenance in a manifest; its outputs
+must not be presented as the primary fair-comparison result.
+
+```bash
+nohup scripts/group/queue_femnist_fixed_lr_sensitivity.sh \
+  > outputs/convergence/sensitivity-femnist-fixedlr-queue.log 2>&1 &
+```
