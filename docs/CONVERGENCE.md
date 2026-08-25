@@ -175,8 +175,11 @@ The FEMNIST convergence configs use the official 62-class TFF release, a
 3,246,270-parameter two-convolution CNN, 1,000 natural writer clients in the
 fixed population, and 100 randomly participating writers per round. They use
 the same four plaintext aggregation definitions, 1,000-round schedule,
-validation-only tuning, and final-only test evaluation as CIFAR-100. FEMNIST
-is naturally writer-partitioned and must not be described as Dirichlet data.
+validation-only tuning, and final-only test evaluation as CIFAR-100. The 124
+root examples, 3,200 threshold-calibration examples, and 10,000 tuning-
+validation examples are writer-disjoint from participating clients and
+mutually disjoint from one another. FEMNIST is naturally writer-partitioned
+and must not be described as Dirichlet data.
 
 Prepare the data before the GPUs become available:
 
@@ -201,3 +204,13 @@ scripts/group/run_femnist_pilots_seed1.sh baselines 1
 
 Select by round-100 held-out `validation_accuracy`, retain all pilot logs, and
 only then freeze the four learning rates for the 1,000-round runs.
+
+For the single-seed run on the group server, the queue calibrates once, starts
+the baseline pilots on GPU 1 immediately, waits for the existing CIFAR-10
+SignSGD track to release GPU 0, then performs equal-budget selection and the
+four 1,000-round seed-1 runs:
+
+```bash
+nohup scripts/group/queue_femnist_seed1.sh \
+  > outputs/convergence/femnist-seed1-queue.log 2>&1 &
+```

@@ -17,9 +17,16 @@ run_candidate() {
     local learning_rate="$2"
     local label="${learning_rate//./p}"
     local output="$output_root/tuning-femnist-${method}-seed1-lr${label}"
-    if [[ -f "$output/checkpoint.pt" ]]; then
+    local raw="$output/rounds.jsonl"
+    local rows=0
+    if [[ -f "$raw" ]]; then rows="$(wc -l < "$raw")"; fi
+    if (( rows >= 100 )); then
         echo "[$(date -Is)] skipping completed $method lr=$learning_rate"
         return
+    fi
+    local resume_args=()
+    if [[ -f "$output/checkpoint.pt" ]]; then
+        resume_args=(--resume "$output/checkpoint.pt")
     fi
     echo "[$(date -Is)] starting $method lr=$learning_rate on CUDA index $gpu"
     CUDA_VISIBLE_DEVICES="$gpu" "$python_bin" -u -m rain.cli.train \
@@ -28,6 +35,7 @@ run_candidate() {
         --stop-after 100 \
         --output "$output" \
         --device cuda \
+        "${resume_args[@]}" \
         >> "$output_root/tuning-femnist-${method}-seed1-lr${label}.log" 2>&1
 }
 
