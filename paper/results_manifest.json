@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "policy": "A group is completed only after all locked seeds and conditions have raw measurements, environment records, resolved configs and checksums. Source availability is not a result.",
+  "expected_groups": ["convergence", "privacy", "robustness", "efficiency", "ablation"],
+  "completed_groups": [],
+  "artifacts": []
+}

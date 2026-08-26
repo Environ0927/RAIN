@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "datasets": ["femnist", "cifar10", "tinyimagenet"],
+  "experiments": ["convergence", "privacy", "robustness", "efficiency", "ablation"],
+  "convergence": {
+    "aggregations": ["fedavg", "rain", "signsgd", "flod"],
+    "seeds": [1, 2, 3],
+    "report": ["accuracy", "balanced_accuracy", "loss", "mean", "std"]
+  },
+  "privacy": {
+    "in_tree": ["rain"],
+    "comparisons": ["approx-shuffling", "camel"],
+    "vary": ["local_randomization", "clients", "rounds"],
+    "delta": 0.00001
+  },
+  "robustness": {
+    "attacks": ["krum", "min-max", "scaling", "attack-dpfl", "raa", "woaa"],
+    "primary_aggregations": ["rain", "foundationfl", "fltrust", "flod", "rflpa"],
+    "shuffle_degradation_aggregations": [
+      "krum", "trim-mean", "foundationfl", "flod", "rflpa", "shieldfl",
+      "signguard", "fltrust", "foolsgold", "divide_and_conquer", "contra",
+      "romoa", "flare"
+    ],
+    "malicious_ratios": [0.1, 0.2, 0.4]
+  },
+  "efficiency": {
+    "in_tree": ["rain"],
+    "comparisons": ["camel", "flguard"],
+    "report": [
+      "client_to_server_bytes", "server_to_server_bytes", "offline_bytes",
+      "online_bytes", "client_comp_seconds", "server_comp_sum_seconds",
+      "server_comp_critical_seconds", "peak_memory_bytes"
+    ]
+  },
+  "ablation": {
+    "factors": [
+      "reference_size", "reference_bias", "malicious_ratio", "chunk_size",
+      "client_count", "model_dimension", "integrity"
+    ]
+  }
+}

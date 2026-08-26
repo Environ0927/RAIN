@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "data": {"name": "cifar10", "clients": 2, "server_pc": 20, "reference_bias": 0.1, "non_iid_bias": 0.0},
+  "model": {"name": "resnet18-cifar", "num_classes": 10},
+  "training": {"rounds": 1, "batch_size": 2, "learning_rate": 0.001, "seed": 7, "checkpoint_every": 1},
+  "protocol": {"aggregation": "rain", "tau": 0.40, "chunk_size": 262144, "integrity": true},
+  "privacy": {"clip_norm": 1.0, "noise_multiplier": 4.0, "delta": 0.00001},
+  "attack": {"name": "none", "malicious_clients": 0}
+}

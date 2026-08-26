@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "status": "frozen-before-formal-runs",
+  "seeds": [1, 2, 3],
+  "shared": {
+    "clip_norm": 1.0,
+    "delta": 0.00001,
+    "epsilon0_mapping": {
+      "formula": "noise_multiplier = kappa * sensitivity_multiplier / epsilon0",
+      "kappa": 1.0,
+      "sensitivity_multiplier": 2.0
+    },
+    "threshold_quantile": 0.95,
+    "amp": true,
+    "checkpoint_every": 25
+  },
+  "datasets": {
+    "femnist": {
+      "model": "62-class CNN",
+      "parameters": 3246270,
+      "clients": 100,
+      "partition": "natural writer-disjoint",
+      "reference_samples": 124,
+      "calibration_samples": 3200,
+      "validation_samples": 10000,
+      "batch_size": 32,
+      "optimizer": "server SGD without momentum or weight decay",
+      "local_steps": 1,
+      "figure4_learning_rates": {"fedavg": 0.1, "rain": 0.0002, "signsgd": 0.0001},
+      "figure4_minimum_learning_rates": {"fedavg": 0.001, "rain": 0.00001, "signsgd": 0.00001},
+      "learning_rate_schedule": "cosine"
+    },
+    "cifar10": {
+      "model": "CIFAR-style ResNet-18",
+      "parameters": 11173962,
+      "clients": 20,
+      "partition": "Dirichlet(alpha=0.5)",
+      "reference_samples": 500,
+      "calibration_samples": 2000,
+      "validation_samples": 5000,
+      "batch_size": 64,
+      "optimizer": "client SGD with momentum 0.9, Nesterov, and weight decay 0.0005",
+      "local_steps": 5,
+      "client_learning_rate": 0.05,
+      "figure4_server_learning_rates": {"fedavg": 1.0, "rain": 0.0002, "signsgd": 0.0002},
+      "figure4_minimum_server_learning_rates": {"fedavg": 1.0, "rain": 0.00001, "signsgd": 0.00001},
+      "learning_rate_schedule": "cosine"
+    },
+    "tinyimagenet": {
+      "model": "small-image ResNet-18 with 200-class head",
+      "parameters": 11271432,
+      "clients": 20,
+      "partition": "Dirichlet(alpha=0.5)",
+      "reference_samples": 400,
+      "calibration_samples": 1000,
+      "validation_samples": 5000,
+      "batch_size": 16,
+      "optimizer": "client SGD with momentum 0.9, Nesterov, and weight decay 0.0005",
+      "local_steps": 2,
+      "client_learning_rate": 0.025,
+      "epsilon0": 10.0,
+      "noise_multiplier": 0.2,
+      "convergence_server_learning_rates": {"fedavg": 1.0, "rain": 0.0002, "signsgd": 0.00005, "flod": 0.00005},
+      "convergence_learning_rate_schedule": "constant",
+      "robustness_rain_learning_rate": 0.001,
+      "robustness_rain_minimum_learning_rate": 0.00005,
+      "robustness_learning_rate_schedule": "cosine"
+    }
+  },
+  "figure4": {
+    "rounds": 1000,
+    "epsilon0": 10.0,
+    "noise_multiplier": 0.2,
+    "attacks": ["none"],
+    "methods": ["fedavg", "rain", "signsgd"],
+    "datasets": ["femnist", "cifar10"]
+  },
+  "other_learning_figures": {
+    "rounds": 200,
+    "evaluation_every": 5,
+    "local_steps": {"femnist": 2, "cifar10": 2, "tinyimagenet": 2}
+  },
+  "reporting": {
+    "utility_seeds": [1, 2, 3],
+    "efficiency_warmup_runs": 1,
+    "efficiency_measured_runs": 5
+  },
+  "hardware": {
+    "cpu": "Intel Core i9-14900KF (24 CPUs exposed to the experiment process)",
+    "gpu": "2 x NVIDIA GeForce RTX 4090 D, 24564 MiB each",
+    "ram": "125 GiB usable",
+    "os": "Ubuntu 22.04 LTS, Linux 6.8",
+    "physical_network": "1 GbE host interface",
+    "timed_network_model": "single-host in-process two-server simulation; logical serialized bytes are counted and physical network latency is excluded"
+  }
+}

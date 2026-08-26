@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "artifacts": [
+    {
+      "name": "RAIN source and tests",
+      "kind": "source",
+      "availability": "included",
+      "location": "rain/, tests/, aggregation_rules.py"
+    },
+    {
+      "name": "Locked configurations and experiment matrix",
+      "kind": "configuration",
+      "availability": "included",
+      "location": "configs/, paper/experiment_matrix.json, paper/hyperparameters.json"
+    },
+    {
+      "name": "CIFAR-10 and FEMNIST Figure 4 threshold calibrations",
+      "kind": "configuration",
+      "availability": "included",
+      "location": "calibration/paper/",
+      "note": "Generated from independent calibration splits; manifests record the split."
+    },
+    {
+      "name": "Tiny-ImageNet threshold calibration",
+      "kind": "configuration",
+      "availability": "pending",
+      "location": "calibration/paper/tinyimagenet_e10_seed1.json",
+      "note": "Must be generated from the licensed Tiny-ImageNet data before the corresponding formal RAIN run."
+    },
+    {
+      "name": "CIFAR-10",
+      "kind": "data",
+      "availability": "download-script",
+      "location": "torchvision downloader invoked by rain.cli.train",
+      "redistribution": "not included; acquired from the upstream dataset distributor"
+    },
+    {
+      "name": "FEMNIST",
+      "kind": "data",
+      "availability": "preparation-script",
+      "location": "rain.cli.prepare_femnist and LEAF-compatible loader",
+      "redistribution": "not included; generated or acquired under upstream terms"
+    },
+    {
+      "name": "Tiny-ImageNet",
+      "kind": "data",
+      "availability": "manual-download",
+      "location": "documented layout in docs/LARGE_SCALE.md",
+      "redistribution": "not included because access is controlled by the upstream distributor"
+    },
+    {
+      "name": "Formal experimental results",
+      "kind": "results",
+      "availability": "pending",
+      "location": "paper/results_manifest.json",
+      "note": "Only genuine completed groups with raw logs and provenance may be added."
+    },
+    {
+      "name": "Camel and FLGuard",
+      "kind": "external-baseline",
+      "availability": "pinned-download",
+      "location": "paper/external_baselines.json and scripts/install_external_baselines.py"
+    }
+  ]
+}

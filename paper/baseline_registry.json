@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "policy": "Every baseline named in the paper is either executed by the unified trainer, implemented as a cited analytical accountant, or reproduced from an exact upstream Git commit. Results from different implementations must not be mixed silently.",
+  "baselines": [
+    {"name": "fedavg", "category": ["convergence"], "mode": "in-tree", "unified_cli": true, "source": "rain/training/plaintext_aggregation.py"},
+    {"name": "signsgd", "category": ["convergence"], "mode": "in-tree", "unified_cli": true, "source": "rain/training/plaintext_aggregation.py"},
+    {"name": "krum", "category": ["robustness"], "mode": "in-tree", "unified_cli": true, "source": "rain/training/plaintext_aggregation.py"},
+    {"name": "trim-mean", "category": ["robustness"], "mode": "in-tree", "unified_cli": true, "source": "rain/training/plaintext_aggregation.py"},
+    {"name": "median", "category": ["robustness"], "mode": "in-tree", "unified_cli": true, "source": "rain/training/plaintext_aggregation.py"},
+    {"name": "foundationfl", "category": ["robustness"], "mode": "in-tree", "unified_cli": true, "source": "rain/training/plaintext_aggregation.py"},
+    {"name": "flod", "category": ["convergence", "robustness"], "mode": "in-tree", "unified_cli": true, "source": "rain/training/plaintext_aggregation.py"},
+    {"name": "rflpa", "category": ["robustness"], "mode": "in-tree-utility-rule", "unified_cli": true, "source": "rain/training/plaintext_aggregation.py", "upstream_repository": "https://github.com/NusIoraPrivacy/RFLPA", "upstream_commit": "dcd71183a907d70d0a385bd2bbf6385078b4c01f", "scope": "cosine-trust utility rule; packed-share protocol costs require upstream artifact"},
+    {"name": "shieldfl", "category": ["robustness"], "mode": "retained-adapter", "unified_cli": true, "stateful": true, "source": "aggregation_rules.py", "upstream_repository": "https://github.com/encryptogroup/SAFEFL", "upstream_commit": "31773ec23e25e620b6662ae284b507f1fffcd6e7", "function_sha256": "3f0716beffba0ad75f57a7d802173eef9e9c34bffd13e16ae8bef40997fa16a6"},
+    {"name": "signguard", "category": ["robustness"], "mode": "retained-adapter", "unified_cli": true, "source": "aggregation_rules.py", "upstream_repository": "https://github.com/encryptogroup/SAFEFL", "upstream_commit": "31773ec23e25e620b6662ae284b507f1fffcd6e7", "function_sha256": "afd0c60e3f69a5caf21c5837a2f3f6fff7b91773fc32e1beb84ed458d0c07772"},
+    {"name": "fltrust", "category": ["robustness"], "mode": "in-tree", "unified_cli": true, "source": "rain/training/plaintext_aggregation.py"},
+    {"name": "foolsgold", "category": ["robustness"], "mode": "retained-adapter", "unified_cli": true, "stateful": true, "source": "aggregation_rules.py", "upstream_repository": "https://github.com/encryptogroup/SAFEFL", "upstream_commit": "31773ec23e25e620b6662ae284b507f1fffcd6e7", "function_sha256": "bb1f35bf5e5204ea8d5884660c63be632f8a6b8de8835350ebb760829571f31c"},
+    {"name": "divide-and-conquer", "category": ["robustness"], "mode": "retained-adapter", "unified_cli": true, "source": "aggregation_rules.py", "upstream_repository": "https://github.com/encryptogroup/SAFEFL", "upstream_commit": "31773ec23e25e620b6662ae284b507f1fffcd6e7", "function_sha256": "fdac42fcb0713ee38cc52881a7077e2cf5562cc18870251699fc5789f8a7f97e"},
+    {"name": "contra", "category": ["robustness"], "mode": "retained-adapter", "unified_cli": true, "stateful": true, "source": "aggregation_rules.py", "upstream_repository": "https://github.com/encryptogroup/SAFEFL", "upstream_commit": "31773ec23e25e620b6662ae284b507f1fffcd6e7", "function_sha256": "ad26c70e8e06f5cc07df160b103508df127afff457b581c131a1a75dd91c34ca"},
+    {"name": "romoa", "category": ["robustness"], "mode": "retained-adapter", "unified_cli": true, "stateful": true, "source": "aggregation_rules.py", "upstream_repository": "https://github.com/encryptogroup/SAFEFL", "upstream_commit": "31773ec23e25e620b6662ae284b507f1fffcd6e7", "function_sha256": "c806627b0ae1115ac0e71acf8f01e3682dbd97d86fe2de9fe267084f750018f0"},
+    {"name": "flare", "category": ["robustness"], "mode": "retained-adapter", "unified_cli": true, "requires_public_reference": true, "source": "aggregation_rules.py", "upstream_repository": "https://github.com/encryptogroup/SAFEFL", "upstream_commit": "31773ec23e25e620b6662ae284b507f1fffcd6e7", "function_sha256": "2ab572cc2ad093fd2be13267d719cb88d5308d829659a084d2465eb2a67370db"},
+    {"name": "approx-shuffling", "category": ["privacy"], "mode": "in-tree-analytical", "unified_cli": false, "source": "rain/privacy/approx_shuffling.py", "paper": "https://arxiv.org/abs/2001.03618"},
+    {"name": "camel", "category": ["privacy", "efficiency"], "mode": "external-pinned", "unified_cli": false, "repository": "https://github.com/Shuangqing-Xu/Camel", "commit": "19f5aced24e86872d8864a6fd7c38b576050970f"},
+    {"name": "flguard", "category": ["efficiency"], "mode": "external-pinned", "unified_cli": false, "repository": "https://github.com/201younghanlee/FLGuard", "commit": "537c5919004eda8fa7fa2339c5842b390ab05b93"}
+  ]
+}

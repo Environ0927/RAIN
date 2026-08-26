@@ -1,0 +1,32 @@
+{
+  "schema_version": 2,
+  "policy": "Third-party code is not copied into the RAIN package. Install a pinned checkout at the expected path and record the commit before comparative reproduction.",
+  "baselines": [
+    {
+      "name": "approx-shuffling",
+      "purpose": "privacy-accounting comparison",
+      "paper": "https://arxiv.org/abs/2001.03618",
+      "mode": "in-tree-analytical",
+      "source": "rain/privacy/approx_shuffling.py",
+      "integration": "run rain-approx-shuffling and retain the theorem-domain fields in every JSON row"
+    },
+    {
+      "name": "camel",
+      "purpose": "privacy and efficiency comparison",
+      "paper": "https://arxiv.org/abs/2410.03407",
+      "repository": "https://github.com/Shuangqing-Xu/Camel",
+      "commit": "19f5aced24e86872d8864a6fd7c38b576050970f",
+      "expected_path": "external/Camel",
+      "integration": "run the upstream artifact in its pinned environment and import measured JSON; do not substitute RAIN timings"
+    },
+    {
+      "name": "flguard",
+      "purpose": "secure efficiency comparison",
+      "paper": "https://arxiv.org/abs/2412.12643",
+      "repository": "https://github.com/201younghanlee/FLGuard",
+      "commit": "537c5919004eda8fa7fa2339c5842b390ab05b93",
+      "expected_path": "external/FLGuard",
+      "integration": "run the pinned upstream artifact and import measured JSON; do not substitute RAIN timings"
+    }
+  ]
+}

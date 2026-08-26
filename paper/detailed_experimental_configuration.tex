@@ -1,0 +1,134 @@
+\section{Detailed Experimental Configuration}
+\label{app:exp-config}
+
+This appendix reports the complete experimental configuration used in
+Section~\ref{sec:Evaluation}. Unless explicitly varied by an experiment, the
+data partition, model initialization, participating-client sequence, local
+minibatches, malicious-client indices, and local-randomization seeds are shared
+by all compared aggregation methods for a given dataset and seed. Method-specific
+server step sizes are listed below and are frozen using only the validation set
+before the corresponding attack experiments are executed.
+
+\paragraph{Datasets and models.}
+We evaluate CIFAR-10, FEMNIST, and Tiny-ImageNet. CIFAR-10 uses a CIFAR-style
+ResNet-18 with a $3\times3$ stride-one stem, no initial max-pooling layer,
+adaptive global average pooling, and a 10-class output layer (11,173,962
+parameters). FEMNIST uses a 62-class CNN with two $3\times3$ convolutional
+layers of 32 and 64 channels, one $2\times2$ max-pooling layer, a 256-unit
+fully connected layer, and a 62-class output layer (3,246,270 parameters).
+Tiny-ImageNet uses the same small-image ResNet-18 stem with a 200-class output
+layer (11,271,432 parameters) and $64\times64$ inputs.
+
+FEMNIST retains its native writer-disjoint partition. We construct a population
+of 1,000 writer clients and sample 100 clients without replacement in every
+communication round. CIFAR-10 and Tiny-ImageNet are partitioned across 100
+population clients with a label-wise Dirichlet distribution with concentration
+$\alpha=0.5$; 20 clients are sampled without replacement per round. The
+partition seed is fixed to 1 across methods. We require at least 64 samples per
+CIFAR-10 client and 32 samples per Tiny-ImageNet client.
+
+\paragraph{Federated training.}
+We use fixed local optimizer steps rather than local epochs because FEMNIST
+writers and Dirichlet clients contain different numbers of examples. Hence,
+no conversion from steps to an ambiguous fractional number of local epochs is
+performed. The convergence configuration is summarized below.
+
+\begin{table}[t]
+  \centering
+  \small
+  \begin{tabular}{lccccp{4.8cm}}
+    \toprule
+    Dataset & $N$ & Batch & Local steps & Rounds & Optimizer and learning rate \\
+    \midrule
+    CIFAR-10 & 20 & 64 & 5 & 1,000 & Client SGD, learning rate 0.05,
+    momentum 0.9, Nesterov enabled, weight decay $5\times10^{-4}$.
+    Server step: 1.0 for FedAvg and $2\times10^{-4}$ for RAIN and SignSGD. \\
+    FEMNIST & 100 & 32 & 1 & 1,000 & One minibatch gradient per selected
+    writer; server SGD without momentum or weight decay. Server step: 0.1 for
+    FedAvg, $2\times10^{-4}$ for RAIN, and $10^{-4}$ for SignSGD. \\
+    Tiny-ImageNet & 20 & 16 & 2 & 1,000 & Client SGD, learning rate 0.025,
+    momentum 0.9, Nesterov enabled, weight decay $5\times10^{-4}$.
+    Server step: 1.0 for FedAvg, $2\times10^{-4}$ for RAIN, and
+    $5\times10^{-5}$ for SignSGD and FLOD. \\
+    \bottomrule
+  \end{tabular}
+  \caption{Convergence-training hyperparameters. $N$ is the number of clients
+  selected in each communication round, not the total client population.}
+  \label{tab:app-training-config}
+\end{table}
+
+CIFAR-10 uses cosine decay to a server step of $10^{-5}$ for RAIN and SignSGD;
+the FedAvg server step remains 1.0. FEMNIST uses cosine minima of $10^{-3}$,
+$10^{-5}$, and $10^{-5}$ for FedAvg, RAIN, and SignSGD, respectively.
+Tiny-ImageNet uses the constant server steps shown in
+Table~\ref{tab:app-training-config}. Robustness, privacy--utility, and
+reference-mismatch experiments run for 200 communication rounds and use two
+local steps per selected client; method-specific server steps are selected on
+the reserved validation set, frozen before attack evaluation, and archived in
+the resolved run configuration. We evaluate validation accuracy every 10
+rounds in convergence runs (every 5 rounds in 200-round runs), save a
+checkpoint every 25 rounds, and use CUDA automatic mixed precision.
+
+\paragraph{Shuffle-DP parameters.}
+Unless otherwise specified, the local randomization level is
+$\varepsilon_0=10$ and $\delta=10^{-5}$. Each client update is clipped to
+$\ell_2$ norm $C=1$ before Gaussian randomization. We use the explicit mapping
+$\sigma/C=2/\varepsilon_0$, so the default noise multiplier is 0.2. The
+end-to-end privacy budget is computed with the RDP accountant described in
+Section~\ref{sec:Accounting}, using integer orders
+$\Lambda=\{2,3,\ldots,128\}$. Experiments in
+Fig.~\ref{fig:rain-privacy-tradeoff} vary $\varepsilon_0$ and recalibrate the
+corresponding threshold; all other privacy parameters remain fixed.
+
+\paragraph{Reference set and RAIN parameters.}
+The audited reference set contains 124 FEMNIST examples, 500 CIFAR-10 examples,
+and 400 Tiny-ImageNet examples. These examples are disjoint from client
+training, threshold-calibration, validation, and test data. Threshold
+calibration uses a further 3,200, 2,000, and 1,000 benign examples for FEMNIST,
+CIFAR-10, and Tiny-ImageNet, respectively. For every dataset, partition, seed,
+and $\varepsilon_0$, $\tau(\sigma)$ is fixed to the higher-interpolated 95th
+percentile of normalized Hamming mismatch on this independent calibration
+split and is never estimated from the current training round. Reference-size
+and distribution-mismatch experiments vary only the stated reference-set
+factor while holding the remaining split and training configuration fixed.
+
+\paragraph{Attack configuration.}
+The default robustness comparison uses 20\% Byzantine clients unless the
+malicious-client fraction is the experimental variable. Krum Attack, Min-Max,
+Scaling, and Attack-DPFL follow their original definitions. RAA and WOAA
+construct the submitted sign messages as described in
+Section~\ref{Attacks}. Within a dataset/seed/attack condition, all defenses
+receive the same benign client updates before method-specific aggregation and
+the same malicious-client indices and attacked submissions.
+
+\paragraph{Baselines and hyperparameters.}
+Baseline implementations follow the original papers or pinned author-released
+code. Common data, optimization, clipping, randomization, and attack parameters
+are shared across methods. FoundationFL uses its Median instantiation with one
+synthetic update per selected client. DnC uses one filtering iteration with
+$c=1$ and a 10,000-coordinate subsample. CONTRA uses selection fraction 1.0,
+and FLARE uses at most one reference minibatch (32 FEMNIST, 64 CIFAR-10, or 16
+Tiny-ImageNet examples). Defenses requiring a root/reference update receive the
+same task-aligned audited reference split as RAIN. RFLPA's plaintext utility
+experiment implements its cosine-trust aggregation rule; its packed-share
+protocol cost is measured only with the pinned RFLPA artifact and is not
+inferred from plaintext training time.
+
+\paragraph{Hardware and implementation.}
+Experiments run on one Ubuntu 22.04 LTS host with an Intel Core i9-14900KF
+(24 CPUs exposed to the experiment process), 125~GiB usable RAM, and two
+NVIDIA GeForce RTX 4090 D GPUs with 24,564~MiB memory each. The host has a
+1~GbE interface. The artifact is a single-host protocol simulator: the two
+logical non-colluding servers are isolated parties in one process, serialized
+logical message bytes are counted exactly, and physical network latency and
+TCP/IP framing are excluded from timed protocol measurements. GPU utility
+training uses the plaintext realization of the stated aggregation function and
+is not reported as MPC execution time.
+
+Accuracy, balanced accuracy, loss, and attack-success results are reported as
+mean and standard deviation over seeds 1, 2, and 3. Each protocol-efficiency
+condition is measured five times after one untimed warm-up execution; we report
+the mean and standard deviation and retain all five raw measurements. External
+Camel and FLGuard measurements are executed on the same host in their pinned
+environments, with their exact source commit and command stored alongside the
+raw log.

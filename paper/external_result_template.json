@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "records": [
+    {
+      "baseline": "camel",
+      "source_commit": "19f5aced24e86872d8864a6fd7c38b576050970f",
+      "dataset": "fmnist",
+      "seed": 1,
+      "configuration": "upstream train_fmnist.py arguments",
+      "metrics": {
+        "accuracy": 0.0,
+        "wall_seconds": 0.0,
+        "online_bytes": 0
+      },
+      "evidence": "relative/path/to/run_manifest.json"
+    }
+  ]
+}

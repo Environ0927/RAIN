@@ -1,0 +1,13 @@
+{
+  "clip_norm": 1.0,
+  "dimension": 3246270,
+  "mismatch_mean": 0.49998257692674974,
+  "mismatch_std": 0.0002571911834658667,
+  "noise_multiplier": 0.2,
+  "quantile": 0.95,
+  "sample_count": 100,
+  "schema_version": 1,
+  "seed": 10001,
+  "source": "independent-calibration-data",
+  "tau": 0.5004100090257434
+}

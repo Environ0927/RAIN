@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "anonymous_url": "https://anonymous.4open.science/r/RAIN-8C63/",
+  "review_access": "no authentication and no tracking",
+  "availability_period": "submission through shepherd approval",
+  "public_release_on_acceptance": true,
+  "stable_release_plan": "Replace the anonymous link with a permanent archival URL in the camera-ready paper.",
+  "contact_information_in_review_artifact": false
+}

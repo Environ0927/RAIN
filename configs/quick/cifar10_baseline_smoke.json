@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "data": {
+    "name": "cifar10",
+    "root": "./data",
+    "download": false,
+    "clients": 4,
+    "server_pc": 20,
+    "reference_bias": 0.1,
+    "non_iid_bias": 0.0,
+    "workers": 0
+  },
+  "model": {"name": "resnet18-cifar", "num_classes": 10},
+  "training": {
+    "rounds": 1,
+    "batch_size": 2,
+    "test_batch_size": 256,
+    "learning_rate": 0.001,
+    "seed": 7,
+    "checkpoint_every": 1,
+    "amp": true
+  },
+  "protocol": {
+    "aggregation": "fedavg",
+    "backend": "plaintext",
+    "preprocessing": "clip_noise",
+    "tau": 0.4,
+    "dnc_b": 10000,
+    "dnc_niters": 1,
+    "dnc_c": 1.0,
+    "flare_reference_batch": 20
+  },
+  "privacy": {"clip_norm": 1.0, "noise_multiplier": 0.0, "delta": 0.00001},
+  "attack": {"name": "none", "malicious_clients": 0}
+}

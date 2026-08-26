@@ -1,0 +1,1 @@
+{"schema_version": 1, "data": {"name": "mnist", "clients": [10, 20, 30, 50, 100]}, "model": {"name": "lr"}, "training": {"rounds": 100}, "protocol": {"aggregation": "rain", "tau": 0.4, "chunk_size": 4096}, "privacy": {"clip_norm": 1.0, "noise_multipliers": [2, 4, 6, 8], "delta": 0.00001}}

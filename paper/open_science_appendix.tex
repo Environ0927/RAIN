@@ -1,0 +1,28 @@
+\section{Open Science}
+\label{app:open-science}
+
+The anonymous review artifact is available at
+\url{https://anonymous.4open.science/r/RAIN-8C63/}. The link does not require authentication or
+use access tracking and will remain available through the shepherd-approval
+deadline. The artifact contains the RAIN implementation, protocol and privacy
+tests, locked experiment configurations, attack and baseline integrations,
+external-baseline provenance tools, and machine-readable experiment and result
+manifests. The reviewer quick start and the mapping from paper experiments to
+commands are provided in the top-level README and in
+\texttt{docs/OPEN\_SCIENCE.md}.
+
+CIFAR-10 is downloaded by the artifact through torchvision. FEMNIST is prepared
+with the included downloader/converter or supplied as standard LEAF shards.
+Tiny-ImageNet is not redistributed because access is governed by its upstream
+distributor; the artifact documents the required directory layout and validates
+the data before training. Camel and FLGuard are not copied into our repository;
+their public repositories, exact commits, installation commands, and execution
+provenance wrappers are included. Any unavailable or incomplete item is marked
+explicitly in \texttt{paper/artifact\_inventory.json} and
+\texttt{paper/results\_manifest.json}; source availability is never represented
+as a completed experimental result.
+
+If the paper is accepted, all shareable artifacts, completed raw measurements,
+resolved configurations, and checksums will be published at a stable,
+non-anonymous archival URL, which will replace the review link in the
+camera-ready version.

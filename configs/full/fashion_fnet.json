@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "data": {"name": "fmnist", "clients": 30, "server_pc": 100, "reference_bias": 0.1, "non_iid_bias": 0.5},
+  "model": {"name": "fnet", "num_classes": 10},
+  "training": {"rounds": 100, "batch_size": 64, "learning_rate": 0.005, "seed": 1, "checkpoint_every": 5},
+  "protocol": {"aggregation": "rain", "calibration": "calibration/fashion_sigma4.json", "chunk_size": 65536},
+  "privacy": {"clip_norm": 1.0, "noise_multiplier": 4.0, "delta": 0.00001},
+  "attack": {"name": "none", "malicious_clients": 0}
+}

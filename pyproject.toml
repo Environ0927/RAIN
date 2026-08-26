@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rain-artifact"
+version = "0.1.0"
+description = "Protocol-level simulator for RAIN secure shuffling"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+dependencies = [
+  "numpy>=1.23",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=7,<9",
+  "matplotlib>=3.6",
+]
+experiment = [
+  "torch>=1.13",
+  "torchvision>=0.14",
+  "matplotlib>=3.6",
+  "scipy>=1.9",
+  "scikit-learn>=1.1",
+  "h5py>=3.8",
+  "hdbscan>=0.8",
+]
+
+[project.scripts]
+rain-shuffle = "rain.cli.demo_shuffle:main"
+rain-round = "rain.cli.demo_round:main"
+rain-privacy = "rain.cli.privacy:main"
+rain-calibrate = "rain.cli.calibrate:main"
+rain-benchmark = "rain.cli.benchmark:main"
+rain-train = "rain.cli.train:main"
+rain-plot = "rain.cli.plot:main"
+rain-large-benchmark = "rain.cli.large_benchmark:main"
+rain-make-sweep = "rain.cli.make_sweep:main"
+rain-calibrate-large = "rain.cli.calibrate_large:main"
+rain-summarize = "rain.cli.summarize:main"
+rain-summarize-seed-cases = "rain.cli.summarize_seed_cases:main"
+rain-plot-convergence = "rain.cli.plot_convergence:main"
+rain-plot-paper-convergence = "rain.cli.plot_paper_convergence:main"
+rain-prepare-femnist = "rain.cli.prepare_femnist:main"
+rain-select-tuning = "rain.cli.select_tuning:main"
+rain-integrity-demo = "rain.cli.integrity_demo:main"
+rain-artifact-audit = "rain.cli.audit_artifact:main"
+rain-approx-shuffling = "rain.cli.approx_shuffling:main"
+rain-import-external = "rain.cli.import_external_results:main"
+
+[tool.setuptools.packages.find]
+include = ["rain*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"

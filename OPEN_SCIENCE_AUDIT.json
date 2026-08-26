@@ -1,0 +1,20 @@
+{
+  "anonymity": {
+    "anonymous": true,
+    "findings": [],
+    "git_metadata_present": false
+  },
+  "anonymous_package_ready": true,
+  "anonymous_url_configured": true,
+  "inventory_valid": true,
+  "metadata_valid": true,
+  "open_science_submission_ready": true,
+  "required_files": {
+    "RELEASE_CONTENTS.md": true,
+    "docs/OPEN_SCIENCE.md": true,
+    "paper/artifact_inventory.json": true,
+    "paper/open_science.json": true,
+    "paper/open_science_appendix.tex": true,
+    "scripts/build_anonymous_artifact.py": true
+  }
+}
