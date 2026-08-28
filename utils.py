@@ -1,3 +1,5 @@
+"""Legacy utility code retained from the original codebase."""
+
 import torch
 
 

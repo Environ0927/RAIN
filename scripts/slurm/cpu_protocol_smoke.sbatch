@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --job-name=rain-cpu-smoke
-#SBATCH --partition=9654
+#SBATCH --partition=cpu
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
 #SBATCH --time=00:20:00
@@ -11,7 +11,7 @@ set -euo pipefail
 
 cd "${SLURM_SUBMIT_DIR:?submit this job from the RAIN repository root}"
 module purge
-module load python/pytorch
+module load "${RAIN_PYTORCH_MODULE:-python/pytorch}"
 
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"

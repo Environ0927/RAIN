@@ -1,3 +1,5 @@
+"""Legacy data-loading compatibility code retained from the original codebase."""
+
 from __future__ import print_function
 
 import numpy as np
@@ -12,7 +14,7 @@ import re
 
 def _base_dataset_name(name: str) -> str:
     """
-    归一化数据集名：如 'p0.1_mnist' -> 'mnist', 'fashion-mnist' -> 'fmnist'
+    Normalize dataset aliases, for example ``p0.1_mnist`` to ``mnist``.
     """
     ds = name.lower().strip()
     if 'har' in ds:
@@ -35,7 +37,7 @@ def get_shapes(dataset):
         num_outputs = 6
         num_labels = 6
     elif ds in ('mnist', 'fmnist'):
-        # 图像输入交给模型处理；这里只给出占位与类别数
+        # Image tensors are handled by the model; only dimensions are returned here.
         num_inputs = 28 * 28
         num_outputs = 10
         num_labels = 10
@@ -167,12 +169,13 @@ def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server
     """
     Assign the data to the clients.
 
-    bias: [0,1]，越大越非IID。内部映射到 Dirichlet 的 alpha = max(1e-3, (1 - bias))
-    server_pc/p: 服务器验证集大小与类别偏置，延续原有逻辑
+    ``bias`` lies in [0, 1]; larger values produce stronger non-IID partitions.
+    It maps to ``alpha = max(1e-3, 1 - bias)``.
+    ``server_pc`` and ``p`` retain the original validation-set semantics.
     """
     ds = _base_dataset_name(dataset).upper()
 
-    # 服务器样本类别配额（保留原逻辑）
+    # Preserve the original server-set class quota logic.
     samp_dis = [0 for _ in range(num_labels)]
     num1 = int(server_pc * p)
     samp_dis[1] = num1
@@ -195,7 +198,7 @@ def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server
     rng = np.random.default_rng(seed)
 
     if ds == "HAR":
-        # === 原 HAR 路线（保留） ===
+        # Original HAR compatibility path.
         each_worker_data = [[] for _ in range(30)]
         each_worker_label = [[] for _ in range(30)]
         server_data, server_label = [], []
@@ -222,21 +225,21 @@ def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server
         each_worker_data = [torch.cat(w, dim=0) for w in each_worker_data]
         each_worker_label = [torch.stack(w, dim=0) for w in each_worker_label]
 
-        # 随机打乱 30 个 HAR 客户
+        # Shuffle the 30 HAR clients deterministically.
         random_order = np.random.RandomState(seed=seed).permutation(30)
         each_worker_data  = [each_worker_data[i]  for i in random_order]
         each_worker_label = [each_worker_label[i] for i in random_order]
         return server_data, server_label, each_worker_data, each_worker_label
 
     elif ds in ("MNIST", "FMNIST", "CIFAR10"):
-        # === 新：MNIST / FMNIST 路线（不依赖样本自带 clientId） ===
+        # MNIST/FMNIST/CIFAR-10 path without embedded client identifiers.
         each_worker_data = [[] for _ in range(num_workers)]
         each_worker_label = [[] for _ in range(num_workers)]
         server_data, server_label = [], []
         server_indices = []
         worker_indices = [[] for _ in range(num_workers)]
 
-        # 收集各类样本
+        # Group samples by class.
         by_class = [[] for _ in range(num_labels)]
         global_index = 0
         for _, (data, label) in enumerate(train_data):
@@ -246,13 +249,13 @@ def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server
                 by_class[int(y.item())].append((x.unsqueeze(0), y, global_index))
                 global_index += 1
 
-        alpha = max(1e-3, (1.0 - bias))  # bias 越大，alpha 越小 => 越非IID
+        alpha = max(1e-3, (1.0 - bias))  # Larger bias gives smaller alpha and stronger heterogeneity.
         for c in range(num_labels):
             pool = by_class[c]
             if not pool:
                 continue
             rng.shuffle(pool)
-            # Dirichlet 将该类别样本分到 num_workers 个客户端
+            # Partition this class across clients with a Dirichlet draw.
             props = rng.dirichlet([alpha]*num_workers)
             counts = (props/props.sum() * len(pool)).astype(int)
             while counts.sum() < len(pool):
@@ -283,7 +286,7 @@ def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server
             server_data = torch.empty(size=(0, *image_shape)).to(device)
             server_label = torch.empty(size=(0,)).to(device)
 
-        # 合并每个客户端样本
+        # Materialize each client's samples.
         for wid in range(num_workers):
             if len(each_worker_data[wid]) > 0:
                 each_worker_data[wid]  = torch.cat(each_worker_data[wid], dim=0)   # [Ni,1,28,28]
@@ -293,7 +296,7 @@ def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server
                 each_worker_data[wid]  = torch.empty(size=(0, *image_shape)).to(device)
                 each_worker_label[wid] = torch.empty(size=(0,)).to(device)
 
-        # 打乱客户端顺序（num_workers 个）
+        # Shuffle client order deterministically.
         random_order = np.random.RandomState(seed=seed).permutation(num_workers)
         each_worker_data  = [each_worker_data[i]  for i in random_order]
         each_worker_label = [each_worker_label[i] for i in random_order]

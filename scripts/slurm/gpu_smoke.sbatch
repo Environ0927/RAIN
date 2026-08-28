@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --job-name=rain-gpu-smoke
-#SBATCH --partition=4090
+#SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
@@ -12,7 +12,7 @@ set -euo pipefail
 
 cd "${SLURM_SUBMIT_DIR:?submit this job from the RAIN repository root}"
 module purge
-module load python/pytorch
+module load "${RAIN_PYTORCH_MODULE:-python/pytorch}"
 
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"

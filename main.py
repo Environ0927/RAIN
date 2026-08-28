@@ -1,3 +1,5 @@
+"""Legacy training entry point retained for original-code compatibility."""
+
 from __future__ import print_function
 
 import aggregation_rules
@@ -25,11 +27,11 @@ from trust_sign import sign_from_model
 
 @torch.no_grad()
 def add_shuffle_noise(gradients, sigma: float, clip: float = 1.0):
-    """对每个客户端梯度加高斯噪声（模拟 Shuffle-DP 扰动）"""
+    """Add Gaussian perturbations to each client gradient."""
     if sigma is None or sigma <= 0:
         return gradients
     noisy = []
-    for g_list in gradients:  # 每个客户端
+    for g_list in gradients:  # One gradient list per client.
         noisy_client = []
         for g in g_list:
             noise = torch.normal(
@@ -452,9 +454,9 @@ def main(args):
     if args.dataset == "HAR" and args.nworkers != 30:
         raise ValueError("HAR only works for 30 workers!")
 
-    # 文件名：dataset_model_aggregation_attack_YYYYMMDD-HHMMSS
+    # Filename: dataset_model_aggregation_attack_YYYYMMDD-HHMMSS.
     exp_name = f"{args.dataset}_{args.net}_{args.aggregation}_{args.byz_type}_{time.strftime('%Y%m%d-%H%M%S')}"
-    # 把 paraString 写进 csv 第一行（见 metrics.py 的改动）
+    # Record the parameter string in the first CSV row.
     logger = MetricsLogger(out_dir=args.output_dir, exp_name=exp_name, para_string=paraString)
     uplink_enc, downlink_enc = "fp32", "fp32"
 
@@ -560,7 +562,7 @@ def main(args):
             # s_trust = None
             
             for e in range(start_round, args.niter):
-                t_round_start = time.time()  # (ADD) 本轮计时开始
+                t_round_start = time.time()  # Start the round timer.
                 net.train()
                 if e == 0: prev = torch.cat([p.data.flatten() for p in net.parameters()]).clone()
                 cur  = torch.cat([p.data.flatten() for p in net.parameters()])
@@ -655,9 +657,9 @@ def main(args):
                 elif args.aggregation == "signsgd":
                     aggregation_rules.signsgd_smooth(
                         grad_list, net, args.lr, device,
-                        beta=0.1,          # 平滑程度
-                        client_frac=0.1,    # 参与比例（控制波长/起伏）
-                        tie_mode="plus"     # 平票当 +1，减少锯齿
+                        beta=0.1,           # Exponential moving-average coefficient.
+                        client_frac=0.1,    # Client sampling fraction.
+                        tie_mode="plus"     # Resolve tied signs as +1.
                     )
                 elif args.aggregation == "rain":
                     # Existing attacks act only on client updates, before any sharing.
@@ -680,7 +682,7 @@ def main(args):
                 grad_list = []
                 # evaluate the model accuracy
                 if (e + 1) % args.test_every == 0:
-                    # 你原有的评测：ACC 和（若 scaling_attack）ASR
+                    # Evaluate accuracy and, for scaling attacks, attack success rate.
                     test_accuracy, test_success_rate = evaluate_accuracy(
                         test_data, net, device,
                         args.byz_type == "scaling_attack", args.dataset
@@ -688,9 +690,9 @@ def main(args):
                     test_acc_list.append(test_accuracy)
                     test_iterations.append(e)
 
-                    # 额外：细粒度指标（loss / balanced_acc）
+                    # Compute loss and balanced accuracy.
                     m = eval_metrics(net, test_data, device, num_classes=num_outputs)  # loss / acc / bacc
-                    # 通信估计（/round）
+                    # Estimate communication per round.
                     if args.aggregation == "rain":
                         comm_up = rain_result.metrics.client_to_server_bytes
                         comm_down = rain_result.metrics.server_to_server_bytes
@@ -699,12 +701,12 @@ def main(args):
                             num_params=num_params, n_clients=args.nworkers,
                             uplink_encoding=uplink_enc, downlink_encoding=downlink_enc
                         )
-                    per_client_up_kb   = (comm_up / max(1, args.nworkers)) / 1024.0    # 每客户端上行
+                    per_client_up_kb   = (comm_up / max(1, args.nworkers)) / 1024.0
                     per_client_down_kb = (comm_down) / 1024.0    
-                    # 回合耗时
+                    # Elapsed round time.
                     elapsed = time.time() - t_round_start
 
-                    # 写 CSV（ASR 无则留空）
+                    # Write the CSV record; leave ASR empty when unavailable.
                     logger.log(
                         r=e,
                         time_s=elapsed,
@@ -716,16 +718,16 @@ def main(args):
                         comm_up=comm_up,
                         comm_down=comm_down,
                         asr=(test_success_rate if args.byz_type == "scaling_attack" else None),
-                        # ===== 新增 4 个核心指标 =====
+                        # Runtime and communication measurements.
                         client_comp_s=(rain_result.metrics.client_comp_seconds if args.aggregation == "rain" else avg_client_comp_s),
                         server_comp_s=(rain_result.metrics.server_comp_sum_seconds if args.aggregation == "rain" else server_comp_s),
-                        client_up_kb=per_client_up_kb,          # 📡
-                        client_down_kb=per_client_down_kb,      # 📡
-                        server_overall_s=elapsed                # ⏱️
+                        client_up_kb=per_client_up_kb,
+                        client_down_kb=per_client_down_kb,
+                        server_overall_s=elapsed
                     )
 
 
-                    # 你原有的控制台打印（保留）
+                    # Preserve the legacy console summary.
                     if args.byz_type == "scaling_attack":
                         backdoor_success_list.append(test_success_rate)
                         print("Iteration %02d. Test_acc %0.4f. Backdoor success rate: %0.4f"

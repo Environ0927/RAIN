@@ -1,3 +1,5 @@
+"""Legacy aggregation compatibility code retained from the original codebase."""
+
 import attacks
 
 import math
@@ -72,24 +74,24 @@ def fltrust(gradients, net, lr, f, byz, device):
 
 def signsgd(gradients, net, lr, device, tie_to_zero: bool = True, weights=None):
     """
-    SignSGD（无攻击版，最快路径）
-    - gradients: List[List[Tensor]]，每个客户端的逐层梯度
-    - lr: 学习率（作为步长，只用方向，不用幅值）
-    - tie_to_zero: 投票打平时是否置0；False 则将平票视为 +1（更激进）
-    - weights: 可选，对客户端投票加权（如样本数），shape=[N]
+    SignSGD majority-vote update.
+
+    ``gradients`` contains one tensor list per client. ``lr`` is the sign-step
+    size, ``tie_to_zero`` selects the tie rule, and optional ``weights`` has
+    shape ``[N]``.
     """
-    # [D]×N 的矩阵：每列是一个客户端的扁平梯度
+    # Matrix [D, N], with one flattened client gradient per column.
 
     flat_cols = []
     for client in gradients:
         flat_cols.append(torch.cat([g.reshape(-1) for g in client]).to(device))
     M = torch.stack(flat_cols, dim=1)              # [D, N]
 
-    # 多数投票（可选加权）
+    # Majority vote with optional client weights.
     Sgn = torch.sign(M)                            # {-1,0,+1}
     if weights is not None:
         w = torch.as_tensor(weights, device=device, dtype=M.dtype)  # [N]
-        vote = (Sgn * w)                           # 广播到 [D,N]
+        vote = (Sgn * w)                           # Broadcast to [D, N].
         s = vote.sum(dim=1)                        # [D]
     else:
         s = Sgn.sum(dim=1)                         # [D]
@@ -97,10 +99,10 @@ def signsgd(gradients, net, lr, device, tie_to_zero: bool = True, weights=None):
     if tie_to_zero:
         direction = torch.sign(s)                  # {-1,0,+1}
     else:
-        # 平票当 +1
+        # Resolve ties as +1.
         direction = torch.where(s >= 0, torch.ones_like(s), -torch.ones_like(s))
 
-    # 按方向更新参数：param += (-lr) * direction
+    # Apply the sign direction with step size ``lr``.
     idx = 0
     for p in net.parameters():
         n = p.numel()
@@ -111,28 +113,24 @@ def signsgd(gradients, net, lr, device, tie_to_zero: bool = True, weights=None):
 
 @torch.no_grad()
 def signsgd_smooth(
-    gradients,                  # List[List[Tensor]]  每个客户端一组梯度张量
+    gradients,                  # One gradient-tensor list per client.
     net: torch.nn.Module,
     lr: float,
     device: torch.device,
-    beta: float = 0.9,          # EMA 动量（0.85~0.95 更平滑，绿色曲线效果更明显）
-    client_frac: float = 0.3,   # 每轮参与比例
-    tie_mode: str = "plus",     # 平票：+1 / 0 / random
-    weights=None,               # 可选：客户端样本数加权
-    eps: float = 1e-12,         # 数值稳定
+    beta: float = 0.9,          # EMA coefficient.
+    client_frac: float = 0.3,   # Fraction of clients sampled per round.
+    tie_mode: str = "plus",     # Tie rule: plus, zero, or random.
+    weights=None,               # Optional client weights.
+    eps: float = 1e-12,         # Numerical-stability constant.
 ):
     """
-    SignSGD with momentum (Signum) —— 平滑震荡版（绿色曲线）
-    - 先做多数投票得到方向 dir
-    - 维护动量 m = beta*m + (1-beta)*dir
-    - 用 sign(m) 更新参数（抑制抖动，曲线更平滑）
+    SignSGD with an exponential moving average of majority-vote directions.
 
-    约定：
-    - 在 net 上持久化一维 buffer: net._sign_m（与模型展平后一致的长度）
-    - gradients[i] 是第 i 个客户端的梯度张量列表（与 net.parameters() 对齐）
+    The one-dimensional ``net._sign_m`` buffer follows flattened parameter
+    order. Each ``gradients[i]`` list follows ``net.parameters()`` order.
     """
 
-    # === 1) 采样客户端 ===
+    # 1) Sample clients.
     N = len(gradients)
     k = max(1, int(math.ceil(client_frac * N)))
     if k < N:
@@ -140,31 +138,31 @@ def signsgd_smooth(
     else:
         idxs = list(range(N))
 
-    # === 2) 扁平堆叠 → [D, k] ===
+    # 2) Flatten and stack into [D, k].
     cols = []
     for i in idxs:
-        # 拼接该客户端所有梯度为一维
+        # Concatenate this client's tensors in parameter order.
         flat = torch.cat([g.detach().reshape(-1).to(device) for g in gradients[i]])
         cols.append(flat)
     M = torch.stack(cols, dim=1)            # [D, k]
     Sgn = torch.sign(M)                     # {-1,0,+1}
 
-    # === 3) 多数投票（可加权） ===
+    # 3) Majority vote with optional weights.
     if weights is not None:
         w_full = torch.as_tensor(weights, device=device, dtype=M.dtype)
         w = w_full[idxs] if k < N else w_full
-        # 广播到 [D, k]
+        # Broadcast across [D, k].
         s = (Sgn * w.unsqueeze(0)).sum(dim=1)
     else:
         s = Sgn.sum(dim=1)                  # [D]
 
-    # === 4) 平票处理 ===
+    # 4) Apply the configured tie rule.
     ones = torch.ones_like(s)
-    if tie_mode == "plus":      # 平票强行 +1，曲线更稳、少回摆
+    if tie_mode == "plus":      # Resolve ties as +1.
         direction = torch.where(s >= 0, ones, -ones)
-    elif tie_mode == "zero":    # 平票置 0（更保守）
+    elif tie_mode == "zero":    # Preserve ties as zero.
         direction = torch.sign(s)
-    elif tie_mode == "random":  # 平票随机 ±1
+    elif tie_mode == "random":  # Resolve ties uniformly as -1 or +1.
         direction = torch.sign(s)
         zeros = (direction == 0)
         if zeros.any():
@@ -173,10 +171,10 @@ def signsgd_smooth(
     else:
         raise ValueError("tie_mode must be one of {'plus','zero','random'}")
 
-    # 将 0 处理成 +1，避免停滞
+    # Map any remaining zero direction to +1.
     direction = torch.where(direction == 0, ones, direction)
 
-    # === 5) EMA 动量（平滑关键） ===
+    # 5) Update the EMA direction buffer.
     D = direction.numel()
     if not hasattr(net, "_sign_m") or net._sign_m is None or net._sign_m.numel() != D:
         net._sign_m = torch.zeros(D, device=device, dtype=direction.dtype)
@@ -185,7 +183,7 @@ def signsgd_smooth(
     smooth_dir = torch.sign(net._sign_m)
     smooth_dir = torch.where(smooth_dir == 0, ones, smooth_dir)
 
-    # === 6) 应用更新 ===
+    # 6) Apply the update.
     off = 0
     for p in net.parameters():
         n = p.numel()

@@ -1,4 +1,5 @@
-# util/metrics.py
+"""Metrics helpers for the retained legacy compatibility path."""
+
 import os, csv
 import torch
 import torch.nn.functional as F
@@ -9,27 +10,26 @@ class MetricsLogger:
         self.csv_path = os.path.join(out_dir, f"{exp_name}.csv")
         self.f = open(self.csv_path, "w", newline="", encoding="utf-8")
         self.w = csv.writer(self.f)
-        # 先写一行实验设置（来自 main.py 的 paraString）
+        # Record the experiment settings before the tabular data.
         if para_string is not None:
             self.w.writerow(["# EXP SETTINGS", para_string])
-        # 表头（原有列 + 新增列）
+        # CSV header, including runtime and communication measurements.
         self.w.writerow([
             "round","time_s","num_clients","agg",
             "test_loss","acc","balanced_acc",
             "comm_up_bytes","comm_down_bytes","asr",
-            # ===== 新增 =====
-            "client_comp_s",              # 🧩 Per-Client Comp. Cost (s)
-            "server_comp_s",              # 🧮 Server-Side Comp. Cost (s)
-            "client_up_kb",               # 📡 Per-Client Comm. Cost (KB, uplink)
-            "client_down_kb",             # 📡 Per-Client Comm. Cost (KB, downlink)
-            "server_overall_s"            # ⏱️ Server-Side Overall Runtime (s)
+            "client_comp_s",              # Per-client computation cost (s)
+            "server_comp_s",              # Server-side computation cost (s)
+            "client_up_kb",               # Per-client uplink cost (KiB)
+            "client_down_kb",             # Per-client downlink cost (KiB)
+            "server_overall_s"            # Overall server runtime (s)
         ])
         self.f.flush()
 
     def log(self, r, time_s, n_clients, agg,
             test_loss, acc, bacc,
             comm_up, comm_down, asr=None,
-            # ===== 新增参数 =====
+            # Additional runtime and communication fields.
             client_comp_s=None, server_comp_s=None,
             client_up_kb=None, client_down_kb=None,
             server_overall_s=None):
@@ -38,7 +38,7 @@ class MetricsLogger:
             round(test_loss,6), round(acc,6), round(bacc,6),
             int(comm_up), int(comm_down),
             ("" if asr is None else round(asr,6)),
-            # ===== 新增写入 =====
+            # Additional measurements.
             ("" if client_comp_s   is None else round(client_comp_s, 6)),
             ("" if server_comp_s   is None else round(server_comp_s, 6)),
             ("" if client_up_kb    is None else round(client_up_kb, 6)),
@@ -53,7 +53,7 @@ class MetricsLogger:
 
 @torch.no_grad()
 def eval_metrics(model, loader, device, num_classes=10):
-    """返回: avg CE loss, accuracy, balanced accuracy"""
+    """Return average cross-entropy loss, accuracy, and balanced accuracy."""
     model.eval()
     total, correct, loss_sum = 0, 0, 0.0
     cls_total = [0]*num_classes
@@ -81,10 +81,11 @@ def eval_metrics(model, loader, device, num_classes=10):
 def estimate_comm_bytes(num_params: int, n_clients: int,
                         uplink_encoding="fp32", downlink_encoding="fp32"):
     """
-    理论通信估算（/轮）:
-      uplink_total  = n_clients × per_client_upload
-      downlink_bcast= 1 × broadcast（每个客户端都要收同样的量）
-    编码：'fp32'(4B), 'fp16'(2B), 'sign'(1bit=0.125B)
+    Estimate theoretical communication per round.
+
+    ``uplink_total`` is the number of clients times the per-client upload;
+    ``downlink_bcast`` is one model broadcast. Encodings use 4 bytes for
+    ``fp32``, 2 bytes for ``fp16``, and 1 bit for ``sign``.
     """
     def bpp(enc):
         return 4 if enc=="fp32" else (2 if enc=="fp16" else 0.125)

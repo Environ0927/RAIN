@@ -2,7 +2,7 @@
 # Generic RAIN training/calibration job.
 # Submit with CONFIG and MODE exported; training additionally requires OUTPUT.
 #SBATCH --job-name=rain-experiment
-#SBATCH --partition=4090
+#SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128G
@@ -14,8 +14,10 @@ set -euo pipefail
 
 cd "${SLURM_SUBMIT_DIR:?submit this job from the RAIN repository root}"
 module purge
-module load shangwang
-module load python/pytorch
+if [[ -n "${RAIN_SITE_MODULE:-}" ]]; then
+  module load "$RAIN_SITE_MODULE"
+fi
+module load "${RAIN_PYTORCH_MODULE:-python/pytorch}"
 
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"

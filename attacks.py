@@ -1,3 +1,5 @@
+"""Legacy attack compatibility code retained from the original codebase."""
+
 import math
 
 import torch

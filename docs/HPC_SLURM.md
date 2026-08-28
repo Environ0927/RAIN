@@ -5,10 +5,10 @@ included in the anonymous review artifact. Replace `<gpu-partition>` with the
 partition name shown by your cluster and clone the artifact under any directory
 owned by the current user.
 
-The observed module provides Python 3.12.2, PyTorch 2.4.1+cu118,
-torchvision 0.19.1+cu118, and NumPy 1.26.4. The repository test suite passed on
-the login node. CUDA is expected to be unavailable on the login node and must
-only be used inside a Slurm GPU allocation.
+The job scripts load a site-provided PyTorch module. Set
+`RAIN_PYTORCH_MODULE` when the module has a different name. CUDA is expected
+to be unavailable on the login node and must only be used inside a Slurm GPU
+allocation.
 
 ## Login and update
 
@@ -58,7 +58,7 @@ sbatch --export=ALL,MODE=train,CONFIG=configs/quick/cifar100_resnet34.json,OUTPU
   scripts/slurm/run_experiment.sbatch
 ```
 
-Add `--partition=A800-N` before `--export` when submitting on East China.
+Override the default partition with `--partition=<gpu-partition>` when needed.
 
 Tiny-ImageNet is not downloaded automatically. For FEMNIST, connected hosts
 can run `python -m rain.cli.prepare_femnist --root ./data`; offline compute

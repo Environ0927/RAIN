@@ -101,10 +101,15 @@ See [large-scale experiments](docs/LARGE_SCALE.md) before starting the full
 configs; FEMNIST uses standard LEAF JSON shards, Tiny-ImageNet is a manual
 download, and full runs require an independent calibration file.
 
-For the Zhongke Suanlian Cloud Slurm setup, use the checked-in
-[GPU job scripts and cluster walkthrough](docs/HPC_ZKSL.md).
+For a Slurm-based cluster, use the checked-in
+[GPU job scripts and site-neutral walkthrough](docs/HPC_SLURM.md).
 
 ## Main entry point and compatibility
+
+The top-level `main.py`, `aggregation_rules.py`, `attacks.py`,
+`data_loaders.py`, `trust_sign.py`, `utils.py`, and `util/` modules are
+legacy compatibility code retained from the original codebase. The versioned
+artifact implementation and command-line tools are maintained under `rain/`.
 
 The retained trainer also routes `--aggregation rain` to the new
 `rain.training.adapter` path. It requires a real root set and either a fixed
