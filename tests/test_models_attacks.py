@@ -4,7 +4,7 @@ import pytest
 from rain.training.attacks import ATTACKS, AttackContext, apply_attack
 
 
-def test_current_paper_attacks_and_legacy_rsca_exist_and_preserve_shape():
+def test_current_paper_attacks_and_compatibility_rsca_exist_and_preserve_shape():
     updates = np.random.default_rng(1).normal(size=(8, 20))
     assert set(ATTACKS) == {
         "krum", "min-max", "scaling", "attack-dpfl", "raa", "woaa", "rsca",

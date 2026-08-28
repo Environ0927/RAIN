@@ -164,11 +164,11 @@ def _prepare_raw_log(path: Path, *, start_round: int, resume: bool) -> None:
     ]
     if not resume:
         raise ValueError("output already contains rounds.jsonl; use --resume or a new output directory")
-    retained = [row for row in rows if int(row["round"]) < start_round]
-    if [int(row["round"]) for row in retained] != list(range(start_round)):
+    prior_rows = [row for row in rows if int(row["round"]) < start_round]
+    if [int(row["round"]) for row in prior_rows] != list(range(start_round)):
         raise ValueError("rounds.jsonl does not contain a contiguous history for the checkpoint")
     path.write_text(
-        "".join(json.dumps(row, sort_keys=True) + "\n" for row in retained),
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in prior_rows),
         encoding="utf-8",
     )
 
@@ -341,10 +341,10 @@ def main():
             amp=bool(training.get("amp", False)),
         )
 
-    from rain.training.legacy_adapter import LEGACY_AGGREGATIONS, LegacyAggregationAdapter
-    legacy_adapter = None
-    if aggregation in LEGACY_AGGREGATIONS:
-        legacy_adapter = LegacyAggregationAdapter(
+    from rain.training.baseline_adapter import ADAPTER_AGGREGATIONS, BaselineAggregationAdapter
+    baseline_adapter = None
+    if aggregation in ADAPTER_AGGREGATIONS:
+        baseline_adapter = BaselineAggregationAdapter(
             aggregation, model=model, reference_provider=reference,
             protocol=protocol, device=device, client_count=int(data["clients"]), seed=seed,
         )
@@ -360,10 +360,10 @@ def main():
         torch.set_rng_state(checkpoint["torch_rng"].cpu())
         if device.type == "cuda" and checkpoint.get("cuda_rng") is not None:
             torch.cuda.set_rng_state_all([state.cpu() for state in checkpoint["cuda_rng"]])
-        if legacy_adapter is not None:
+        if baseline_adapter is not None:
             if "aggregation_state" not in checkpoint:
-                raise ValueError("legacy aggregation checkpoint is missing aggregation_state")
-            legacy_adapter.load_state_dict(checkpoint["aggregation_state"])
+                raise ValueError("aggregation checkpoint is missing aggregation_state")
+            baseline_adapter.load_state_dict(checkpoint["aggregation_state"])
     if start_round >= stop_round:
         raise ValueError("checkpoint next_round must be smaller than --stop-after")
     raw_path = output / "rounds.jsonl"
@@ -458,7 +458,7 @@ def main():
                 **result.metrics.as_dict(), "accepted_clients": None,
                 "weight_sum": None, "threshold_count": result.threshold_count,
             }
-        elif legacy_adapter is not None:
+        elif baseline_adapter is not None:
             from rain.training.plaintext_aggregation import preprocess_updates
 
             round_seed = int(np.random.SeedSequence([seed, round_id]).generate_state(1)[0])
@@ -467,19 +467,19 @@ def main():
                 clip_norm=float(privacy["clip_norm"]),
                 noise_multiplier=float(privacy["noise_multiplier"]), seed=round_seed,
             )
-            legacy_result = legacy_adapter.aggregate(
+            baseline_result = baseline_adapter.aggregate(
                 processed_updates,
                 malicious_clients=int(attack.get("malicious_clients", 0)),
                 round_id=round_id,
             )
-            aggregate_update = legacy_result.update
+            aggregate_update = baseline_result.update
             aggregation_metrics = {
                 "client_comp_seconds": preprocessing_seconds,
                 "s0_comp_seconds": 0.0, "s1_comp_seconds": 0.0,
-                "server_comp_sum_seconds": legacy_result.aggregation_seconds,
-                "server_comp_critical_seconds": legacy_result.aggregation_seconds,
+                "server_comp_sum_seconds": baseline_result.aggregation_seconds,
+                "server_comp_critical_seconds": baseline_result.aggregation_seconds,
                 "offline_comp_seconds": 0.0,
-                "online_comp_seconds": legacy_result.aggregation_seconds,
+                "online_comp_seconds": baseline_result.aggregation_seconds,
                 "client_to_server_bytes": 0, "server_to_server_bytes": 0,
                 "offline_bytes": 0, "online_bytes": 0, "message_count": 0,
                 "peak_memory_bytes": 0, "integrity_comp_seconds": 0.0,
@@ -587,7 +587,7 @@ def main():
             torch.save({"schema_version": 1, "model": model.state_dict(), "next_round": round_id + 1,
                 "batch_rng": batch_rng.bit_generator.state, "torch_rng": torch.get_rng_state(),
                 "cuda_rng": torch.cuda.get_rng_state_all() if device.type == "cuda" else None,
-                "aggregation_state": legacy_adapter.state_dict() if legacy_adapter is not None else None,
+                "aggregation_state": baseline_adapter.state_dict() if baseline_adapter is not None else None,
                 "config": config}, output / "checkpoint.pt")
 
 

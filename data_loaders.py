@@ -1,4 +1,4 @@
-"""Legacy data-loading compatibility code retained from the original codebase."""
+"""Dataset loaders for the top-level training interface."""
 
 from __future__ import print_function
 
@@ -171,11 +171,11 @@ def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server
 
     ``bias`` lies in [0, 1]; larger values produce stronger non-IID partitions.
     It maps to ``alpha = max(1e-3, 1 - bias)``.
-    ``server_pc`` and ``p`` retain the original validation-set semantics.
+    ``server_pc`` and ``p`` control the validation-set allocation.
     """
     ds = _base_dataset_name(dataset).upper()
 
-    # Preserve the original server-set class quota logic.
+    # Apply the configured per-class server-set quota.
     samp_dis = [0 for _ in range(num_labels)]
     num1 = int(server_pc * p)
     samp_dis[1] = num1
@@ -198,7 +198,7 @@ def assign_data(train_data, bias, device, num_labels=10, num_workers=100, server
     rng = np.random.default_rng(seed)
 
     if ds == "HAR":
-        # Original HAR compatibility path.
+        # HAR client-partition path.
         each_worker_data = [[] for _ in range(30)]
         each_worker_label = [[] for _ in range(30)]
         server_data, server_label = [], []

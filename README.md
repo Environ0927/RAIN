@@ -87,8 +87,8 @@ simulator.
 
 The primary evaluation scope is writer-partitioned FEMNIST with a
 3.25M-parameter CNN, CIFAR-10 with an 11.17M-parameter ResNet-18, and
-Tiny-ImageNet with an 11.27M-parameter ResNet-18. CIFAR-100 support is retained
-as an auxiliary extension but is not part of the locked paper matrix.
+Tiny-ImageNet with an 11.27M-parameter ResNet-18. CIFAR-100 is available as an
+auxiliary extension but is not part of the locked paper matrix.
 
 ```bash
 python -m rain.cli.train --config configs/quick/femnist_cnn.json --output outputs/femnist-quick --device cuda
@@ -107,12 +107,12 @@ For a Slurm-based cluster, use the checked-in
 ## Main entry point and compatibility
 
 The top-level `main.py`, `aggregation_rules.py`, `attacks.py`,
-`data_loaders.py`, `trust_sign.py`, `utils.py`, and `util/` modules are
-legacy compatibility code retained from the original codebase. The versioned
-artifact implementation and command-line tools are maintained under `rain/`.
+`data_loaders.py`, `trust_sign.py`, `utils.py`, and `util/` modules provide the
+baseline training interface. Protocol implementations and command-line tools
+are maintained under `rain/`.
 
-The retained trainer also routes `--aggregation rain` to the new
-`rain.training.adapter` path. It requires a real root set and either a fixed
+The top-level trainer routes `--aggregation rain` through
+`rain.training.adapter`. It requires a real root set and either a fixed
 calibration file or an explicit threshold:
 
 ```bash
@@ -121,9 +121,8 @@ python main.py --dataset MNIST --net lr --nworkers 4 --niter 1 --server_pc 40 \
   --rain_chunk_size 4096 --output_dir outputs/main-quick
 ```
 
-Only `rain` selects the artifact protocol. The deprecated `rainy` and
-`rainy_tssc` prototypes and their platform-specific shuffling helpers have
-been removed; there is no automatic fallback to a plaintext legacy path.
+Only `rain` selects the artifact protocol. Unsupported prototype names are
+rejected, and there is no automatic fallback to plaintext aggregation.
 
 ## Calibration, privacy, and benchmarks
 

@@ -1,4 +1,4 @@
-"""Legacy utility code retained from the original codebase."""
+"""Kernel and model-update utilities."""
 
 import torch
 

@@ -1,4 +1,4 @@
-"""Legacy trusted-sign helpers retained from the original codebase."""
+"""Trusted-sign helpers for reference-based aggregation."""
 
 from typing import Iterator, Tuple
 import torch

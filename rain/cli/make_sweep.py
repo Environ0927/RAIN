@@ -5,7 +5,7 @@ import argparse, copy, json, math
 from pathlib import Path
 
 from rain.config import load_config
-from rain.training.legacy_adapter import LEGACY_AGGREGATIONS, normalize_legacy_name
+from rain.training.baseline_adapter import ADAPTER_AGGREGATIONS, normalize_aggregation_name
 
 
 MODEL_DIMENSIONS = {
@@ -48,7 +48,7 @@ def main() -> None:
         if args.aggregations
         else [str(base["protocol"]["aggregation"])]
     )
-    aggregations = [normalize_legacy_name(value) for value in aggregations]
+    aggregations = [normalize_aggregation_name(value) for value in aggregations]
     if not 0 <= args.hamming_fraction < float(base["protocol"].get("tau", .5)):
         raise ValueError("hamming-fraction must be non-negative and below public tau")
     output = Path(args.output_dir); output.mkdir(parents=True, exist_ok=True)
@@ -63,7 +63,7 @@ def main() -> None:
                     if aggregation not in ({
                         "rain", "signsgd", "fedavg", "flod", "krum", "trim-mean",
                         "median", "fltrust", "foundationfl", "rflpa",
-                    } | set(LEGACY_AGGREGATIONS)):
+                    } | set(ADAPTER_AGGREGATIONS)):
                         raise ValueError(f"unknown aggregation: {aggregation}")
                     if not 0 <= ratio < 1:
                         raise ValueError("malicious ratios must lie in [0, 1)")

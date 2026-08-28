@@ -1,4 +1,4 @@
-"""Legacy training entry point retained for original-code compatibility."""
+"""Top-level training entry point for baseline and RAIN experiments."""
 
 from __future__ import print_function
 
@@ -727,7 +727,7 @@ def main(args):
                     )
 
 
-                    # Preserve the legacy console summary.
+                    # Print the per-round console summary.
                     if args.byz_type == "scaling_attack":
                         backdoor_success_list.append(test_success_rate)
                         print("Iteration %02d. Test_acc %0.4f. Backdoor success rate: %0.4f"

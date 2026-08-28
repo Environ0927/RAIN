@@ -6,7 +6,7 @@ primary tables unless the paper scope is explicitly changed.
 
 ## Added experiment tiers
 
-The scalable path is separate from the retained tensor-materializing loader.
+The scalable path is separate from the tensor-materializing compatibility loader.
 It stores only sample indices, loads client mini-batches on demand, keeps the
 audited root set disjoint, and evaluates the reference gradient in bounded
 mini-batches. It supports:

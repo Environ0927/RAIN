@@ -7,14 +7,14 @@ import math
 from pathlib import Path
 
 from rain.privacy.local_randomization import noise_multiplier_from_epsilon0
-from rain.training.legacy_adapter import LEGACY_AGGREGATIONS, normalize_legacy_name
+from rain.training.baseline_adapter import ADAPTER_AGGREGATIONS, normalize_aggregation_name
 
 
 REQUIRED_SECTIONS = {"data", "model", "training", "protocol", "privacy"}
 SUPPORTED_AGGREGATIONS = {
     "rain", "signsgd", "fedavg", "flod", "krum", "trim-mean", "median",
     "fltrust", "foundationfl", "rflpa",
-} | set(LEGACY_AGGREGATIONS)
+} | set(ADAPTER_AGGREGATIONS)
 SUPPORTED_ATTACKS = {
     "none", "krum", "min-max", "scaling", "attack-dpfl", "raa", "woaa", "rsca",
 }
@@ -30,7 +30,7 @@ def load_config(path: str | Path) -> dict[str, object]:
     if value["training"].get("rounds", 0) < 1:
         raise ValueError("training.rounds must be positive")
     protocol = value["protocol"]
-    aggregation = normalize_legacy_name(str(protocol.get("aggregation", "")))
+    aggregation = normalize_aggregation_name(str(protocol.get("aggregation", "")))
     protocol["aggregation"] = aggregation
     if aggregation not in SUPPORTED_AGGREGATIONS:
         raise ValueError(

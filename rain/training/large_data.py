@@ -451,7 +451,7 @@ class FEMNISTDataset:
 
 
 class TinyImageNetDataset:
-    """Read the original tiny-imagenet-200 train/val directory layout."""
+    """Read the standard tiny-imagenet-200 train/val directory layout."""
 
     def __init__(self, root: str | Path, *, split: str, transform=None) -> None:
         from PIL import Image

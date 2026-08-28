@@ -14,14 +14,14 @@ class _Reference:
     "shieldfl", "signguard", "foolsgold", "divide-and-conquer",
     "contra", "romoa", "flare",
 ])
-def test_legacy_baseline_runs_through_flat_update_adapter(method):
-    from rain.training.legacy_adapter import LegacyAggregationAdapter
+def test_baseline_runs_through_flat_update_adapter(method):
+    from rain.training.baseline_adapter import BaselineAggregationAdapter
 
     torch.manual_seed(3)
     model = torch.nn.Linear(4, 3)
     dimension = sum(value.numel() for value in model.parameters())
     updates = np.random.default_rng(7).normal(size=(4, dimension)).astype(np.float32)
-    adapter = LegacyAggregationAdapter(
+    adapter = BaselineAggregationAdapter(
         method, model=model, reference_provider=_Reference(),
         protocol={"dnc_b": dimension, "dnc_niters": 1, "dnc_c": 1.0},
         device=torch.device("cpu"), client_count=4, seed=11,
@@ -33,18 +33,18 @@ def test_legacy_baseline_runs_through_flat_update_adapter(method):
 
 
 def test_stateful_baseline_checkpoint_roundtrip():
-    from rain.training.legacy_adapter import LegacyAggregationAdapter
+    from rain.training.baseline_adapter import BaselineAggregationAdapter
 
     model = torch.nn.Linear(4, 3)
     dimension = sum(value.numel() for value in model.parameters())
     updates = np.random.default_rng(17).normal(size=(4, dimension)).astype(np.float32)
-    first = LegacyAggregationAdapter(
+    first = BaselineAggregationAdapter(
         "foolsgold", model=model, reference_provider=_Reference(), protocol={},
         device=torch.device("cpu"), client_count=4, seed=5,
     )
     first.aggregate(updates, malicious_clients=0, round_id=0)
     state = first.state_dict()
-    second = LegacyAggregationAdapter(
+    second = BaselineAggregationAdapter(
         "foolsgold", model=model, reference_provider=_Reference(), protocol={},
         device=torch.device("cpu"), client_count=4, seed=5,
     )

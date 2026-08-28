@@ -1,4 +1,4 @@
-"""Select learning rates from retained validation-only pilot logs."""
+"""Select learning rates from validation-only pilot logs."""
 from __future__ import annotations
 
 import argparse

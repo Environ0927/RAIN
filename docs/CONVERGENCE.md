@@ -15,7 +15,7 @@ valid experiment.
 
 The current large-benchmark order is CIFAR-10, FEMNIST, then Tiny-ImageNet.
 CIFAR-10 is the first fully trained convergence experiment; the earlier
-CIFAR-100 seed-1 run is retained as an under-trained pipeline pilot rather than
+CIFAR-100 seed-1 run is recorded as an under-trained pipeline pilot rather than
 used as the final utility result.
 
 The CIFAR-10 configs use a CIFAR ResNet-18, 100 fixed Dirichlet-alpha-0.5
@@ -41,7 +41,7 @@ scripts/group/run_cifar10_pilots_seed1.sh primary 0
 scripts/group/run_cifar10_pilots_seed1.sh baselines 1
 ```
 
-On the group server, the handoff can be queued while the retained CIFAR-100
+On the group server, the handoff can be queued while the CIFAR-100 pilot
 runs are still finishing. It waits until all four raw logs contain 1,000 rows,
 then calibrates once and starts the two pilot tracks:
 
@@ -55,7 +55,7 @@ RAIN, SignSGD, and FLOD; FedAvg uses server interpolation candidates 0.5, 1.0,
 and 1.5. Because the seed-1 pilot placed all three sign-based methods at the
 upper grid boundary, the preregistered refinement adds `1e-3` and `2e-3` to
 each of those methods. FedAvg receives the same total candidate count by adding
-0.75 and 1.25. This produces five retained candidates per method.
+0.75 and 1.25. This produces five candidates per method.
 
 The paper's Figure 4 comparison is MNIST/FMNIST with Shuffle-DP at
 `epsilon_0=10`. It does not imply that SignSGD must be weak in this separate
@@ -76,7 +76,7 @@ the training seed still changes initialization, client sampling, minibatches,
 and augmentation. Test accuracy remains withheld until the final round. The
 queue writes `cifar10-formal-summary.json` and a validation-convergence figure
 with mean and one-standard-deviation bands. Raw logs and the complete tuning
-selection record are retained.
+selection record are stored with the run artifacts.
 
 ### Single-seed noise probe
 
@@ -101,7 +101,7 @@ nohup scripts/group/run_cifar10_noise5e-5_seed1.sh 1 \
 - `flod`: reference-Hamming ReLU weights followed by a normalized weighted
   sign vector, preserving magnitude below one.
 
-## Retained CIFAR-100 pilot
+## CIFAR-100 pipeline pilot
 
 The CIFAR-100 configurations use ResNet-34, ten fixed Dirichlet clients,
 one local step, no malicious clients, and no DP perturbation.  They are

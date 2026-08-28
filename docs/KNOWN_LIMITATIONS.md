@@ -13,9 +13,8 @@
 - The RDP implementation is the analytical shuffled-Gaussian multinomial upper
   bound, conservatively capped by local Gaussian RDP. It is not claimed to be a
   tighter accountant than the cited paper and uses replacement sensitivity 2C.
-- The legacy baseline collection has optional scientific dependencies and was
-  preserved rather than comprehensively redesigned. The new `rain` path has no
-  dependency on its plaintext RAIN implementation.
+- The comparison baseline collection has optional scientific dependencies.
+  The `rain` path does not depend on its plaintext RAIN implementation.
 - The built-in image backdoor is a deterministic bottom-right 3x3 trigger with
   target class 0. Alternative paper-specific triggers require an explicit
   experiment configuration and should not be compared as identical attacks.

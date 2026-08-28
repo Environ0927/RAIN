@@ -1,9 +1,9 @@
-"""Stateful adapter for the retained robustness baselines.
+"""Stateful adapter for robustness baselines with model-update interfaces.
 
-The original implementations in :mod:`aggregation_rules` update a PyTorch
-model in place.  This adapter reconstructs their expected per-parameter client
+The comparison rules in :mod:`aggregation_rules` update a PyTorch model in
+place. This adapter reconstructs their expected per-parameter client
 gradients, executes the rule on a model copy, and returns the resulting flat
-update to the unified trainer.  Stateful methods expose serializable state so a
+update to the unified trainer. Stateful methods expose serializable state so a
 checkpoint resume is equivalent to an uninterrupted run.
 """
 
@@ -17,13 +17,13 @@ from typing import Any
 import numpy as np
 
 
-LEGACY_AGGREGATIONS = frozenset({
+ADAPTER_AGGREGATIONS = frozenset({
     "shieldfl", "signguard", "foolsgold", "divide-and-conquer",
     "contra", "romoa", "flare",
 })
 
 
-def normalize_legacy_name(name: str) -> str:
+def normalize_aggregation_name(name: str) -> str:
     value = str(name).lower().replace("_", "-")
     if value in {"dnc", "divide-conquer", "divide-and-conquer"}:
         return "divide-and-conquer"
@@ -67,13 +67,13 @@ def _device_state(value: Any, device) -> Any:
 
 
 @dataclass(frozen=True, slots=True)
-class LegacyAggregationResult:
+class AggregationResult:
     update: np.ndarray
     aggregation_seconds: float
 
 
-class LegacyAggregationAdapter:
-    """Run one retained baseline through the unified flat-update interface."""
+class BaselineAggregationAdapter:
+    """Run one comparison baseline through the unified flat-update interface."""
 
     def __init__(
         self,
@@ -86,11 +86,11 @@ class LegacyAggregationAdapter:
         client_count: int,
         seed: int,
     ) -> None:
-        normalized = normalize_legacy_name(method)
-        if normalized not in LEGACY_AGGREGATIONS:
-            raise ValueError(f"unsupported legacy aggregation: {method}")
+        normalized = normalize_aggregation_name(method)
+        if normalized not in ADAPTER_AGGREGATIONS:
+            raise ValueError(f"unsupported adapter aggregation: {method}")
         if client_count < 2:
-            raise ValueError("legacy robustness baselines require at least two clients")
+            raise ValueError("adapter-based robustness baselines require at least two clients")
         self.method = normalized
         self.model = model
         self.reference_provider = reference_provider
@@ -110,9 +110,9 @@ class LegacyAggregationAdapter:
 
     def load_state_dict(self, value: dict[str, Any]) -> None:
         if value.get("schema_version") != 1 or value.get("method") != self.method:
-            raise ValueError("legacy aggregation checkpoint is incompatible")
+            raise ValueError("aggregation checkpoint is incompatible")
         if int(value.get("client_count", -1)) != self.client_count:
-            raise ValueError("legacy aggregation client count changed across resume")
+            raise ValueError("aggregation client count changed across resume")
         self._state = _device_state(dict(value.get("state", {})), self.device)
 
     def _gradients(self, matrix: np.ndarray):
@@ -121,7 +121,7 @@ class LegacyAggregationAdapter:
         templates = list(self.model.parameters())
         expected = sum(parameter.numel() for parameter in templates)
         if matrix.shape != (self.client_count, expected):
-            raise ValueError("legacy update matrix shape does not match model and clients")
+            raise ValueError("update matrix shape does not match model and clients")
         gradients = []
         for row in matrix:
             offset = 0
@@ -173,22 +173,22 @@ class LegacyAggregationAdapter:
         *,
         malicious_clients: int,
         round_id: int,
-    ) -> LegacyAggregationResult:
+    ) -> AggregationResult:
         import torch
         import aggregation_rules
 
         matrix = np.asarray(updates, dtype=np.float32)
         if matrix.ndim != 2 or not np.isfinite(matrix).all():
-            raise ValueError("legacy updates must be a finite 2-D matrix")
+            raise ValueError("updates must be a finite 2-D matrix")
         if matrix.shape[0] != self.client_count:
-            raise ValueError("legacy methods require a fixed client count")
+            raise ValueError("adapter methods require a fixed client count")
         if not 0 <= malicious_clients < self.client_count:
             raise ValueError("malicious_clients must lie in [0, client_count)")
         self._initialize_state(matrix.shape[1])
         gradients = self._gradients(matrix)
         clone = copy.deepcopy(self.model)
-        # Retained rules update parameters directly instead of using an
-        # optimizer.  The adapter model is disposable and never participates
+        # These rules update parameters directly instead of using an
+        # optimizer. The adapter model is disposable and never participates
         # in autograd, so disabling gradients makes those updates explicit and
         # compatible with current PyTorch leaf-tensor checks.
         clone.requires_grad_(False)
@@ -257,7 +257,7 @@ class LegacyAggregationAdapter:
 
         after = torch.cat([parameter.detach().flatten() for parameter in clone.parameters()])
         update = (before - after).to(torch.float32).cpu().numpy()
-        return LegacyAggregationResult(
+        return AggregationResult(
             update=np.ascontiguousarray(update),
             aggregation_seconds=time.perf_counter() - started,
         )

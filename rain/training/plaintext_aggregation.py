@@ -140,7 +140,7 @@ def aggregate_plaintext(
 
     ``rain`` returns the final coordinate sign from Algorithm 3. ``flod`` uses
     the same reference-distance weights but preserves the normalized weighted
-    sign magnitude, matching the repository's retained FLOD implementation.
+    sign magnitude, matching the in-tree FLOD implementation.
     ``signsgd`` performs the standard coordinate majority vote with zero for a
     tie. ``fedavg`` averages full-precision client gradients.
     """

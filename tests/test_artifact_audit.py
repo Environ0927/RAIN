@@ -9,7 +9,7 @@ def test_paper_implementation_coverage_is_complete():
     assert all(report["checks"].values())
     assert report["paper_experiment_matrix"] is True
     assert report["baseline_registry"]["valid"] is True
-    assert all(report["baseline_registry"]["retained_function_hashes"].values())
+    assert all(report["baseline_registry"]["function_hashes_verified"].values())
     # Third-party checkouts are deliberately not vendored. Their installation
     # state must be separate from the in-tree implementation audit.
     assert "external_reproduction_ready" in report

@@ -1,4 +1,4 @@
-"""Legacy aggregation compatibility code retained from the original codebase."""
+"""Aggregation rules used by the unified training interface."""
 
 import attacks
 
@@ -883,7 +883,7 @@ def flare(gradients, net, lr, f, byz, device, server_data):
 
 
 
-def romoa(gradients, net, lr, f, byz, device, F, prev_global_update, seed):   # adapted from the original implementation provided by the authors
+def romoa(gradients, net, lr, f, byz, device, F, prev_global_update, seed):   # Adapted from the authors' reference implementation.
     """
     Based on the description in https://link.springer.com/chapter/10.1007/978-3-030-88418-5_23
     gradients: list of gradients.

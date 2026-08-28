@@ -13,17 +13,17 @@ from rain.artifact_policy import check_open_science
 from rain.config import SUPPORTED_AGGREGATIONS, load_config
 from rain.training.attacks import ATTACKS
 from rain.training.plaintext_aggregation import PLAINTEXT_AGGREGATIONS
-from rain.training.legacy_adapter import LEGACY_AGGREGATIONS
+from rain.training.baseline_adapter import ADAPTER_AGGREGATIONS
 
 
 DATASETS = {"femnist", "cifar10", "tinyimagenet"}
 ATTACK_NAMES = {"krum", "min-max", "scaling", "attack-dpfl", "raa", "woaa"}
-LEGACY_ATTACK_NAMES = {"rsca"}
+COMPATIBILITY_ATTACK_NAMES = {"rsca"}
 PRIMARY_BASELINES = {
     "rain", "signsgd", "fedavg", "flod", "krum", "trim-mean", "median",
     "fltrust", "foundationfl", "rflpa",
 }
-LEGACY_BASELINE_FUNCTIONS = {
+ADAPTER_BASELINE_FUNCTIONS = {
     "shieldfl", "signguard", "foolsgold", "divide_and_conquer", "contra",
     "romoa", "flare",
 }
@@ -119,10 +119,12 @@ def run_audit(root: str | Path) -> dict[str, object]:
                 "present": False, "valid": False, "path": relative,
             }
     protocol = {name: (base / relative).is_file() for name, relative in PROTOCOL_FILES.items()}
-    legacy_path = base / "aggregation_rules.py"
-    legacy_functions = _function_names(legacy_path) if legacy_path.is_file() else set()
-    legacy_hashes = _function_hashes(legacy_path) if legacy_path.is_file() else {}
-    legacy = {name: name in legacy_functions for name in sorted(LEGACY_BASELINE_FUNCTIONS)}
+    comparison_path = base / "aggregation_rules.py"
+    comparison_functions = _function_names(comparison_path) if comparison_path.is_file() else set()
+    comparison_hashes = _function_hashes(comparison_path) if comparison_path.is_file() else {}
+    comparison_modules = {
+        name: name in comparison_functions for name in sorted(ADAPTER_BASELINE_FUNCTIONS)
+    }
 
     configs: dict[str, bool] = {}
     for dataset in sorted(DATASETS):
@@ -175,34 +177,36 @@ def run_audit(root: str | Path) -> dict[str, object]:
             )
             for name, row in registry_rows.items()
         }
-        retained_hashes = {}
-        for name in LEGACY_AGGREGATIONS:
+        verified_hashes = {}
+        for name in ADAPTER_AGGREGATIONS:
             function_name = "divide_and_conquer" if name == "divide-and-conquer" else name
             expected = registry_rows.get(name, {}).get("function_sha256")
-            retained_hashes[name] = bool(expected) and legacy_hashes.get(function_name) == expected
+            verified_hashes[name] = (
+                bool(expected) and comparison_hashes.get(function_name) == expected
+            )
         registry_ok = (
             REQUIRED_REGISTERED_BASELINES.issubset(registry_rows)
             and all(registered_sources.get(name, False) for name in REQUIRED_REGISTERED_BASELINES)
             and all(registry_rows[name].get("mode") for name in REQUIRED_REGISTERED_BASELINES)
-            and all(retained_hashes.values())
+            and all(verified_hashes.values())
         )
     except (OSError, KeyError, TypeError, json.JSONDecodeError):
         registry_rows = {}
         registered_sources = {}
-        retained_hashes = {}
+        verified_hashes = {}
         registry_ok = False
 
     checks = {
         "datasets": DATASETS == {"femnist", "cifar10", "tinyimagenet"},
         "attacks": ATTACK_NAMES.issubset(ATTACKS),
-        "legacy_attack_compatibility": LEGACY_ATTACK_NAMES.issubset(ATTACKS),
+        "compatibility_attack_available": COMPATIBILITY_ATTACK_NAMES.issubset(ATTACKS),
         "primary_aggregations": PRIMARY_BASELINES.issubset(
             SUPPORTED_AGGREGATIONS & PLAINTEXT_AGGREGATIONS
         ),
-        "unified_robustness_baselines": LEGACY_AGGREGATIONS.issubset(
+        "unified_robustness_baselines": ADAPTER_AGGREGATIONS.issubset(
             SUPPORTED_AGGREGATIONS
         ),
-        "legacy_comparison_modules": all(legacy.values()),
+        "comparison_modules": all(comparison_modules.values()),
         "protocol_modules": all(protocol.values()),
         "experiment_configs": all(configs.values()),
         "paper_experiment_matrix": matrix_ok,
@@ -258,10 +262,10 @@ def run_audit(root: str | Path) -> dict[str, object]:
             name: name in SUPPORTED_AGGREGATIONS and name in PLAINTEXT_AGGREGATIONS
             for name in sorted(PRIMARY_BASELINES)
         },
-        "unified_legacy_aggregations": {
-            name: name in SUPPORTED_AGGREGATIONS for name in sorted(LEGACY_AGGREGATIONS)
+        "unified_comparison_aggregations": {
+            name: name in SUPPORTED_AGGREGATIONS for name in sorted(ADAPTER_AGGREGATIONS)
         },
-        "legacy_comparison_modules": legacy,
+        "comparison_modules": comparison_modules,
         "protocol_modules": protocol,
         "experiment_configs": configs,
         "paper_experiment_matrix": matrix_ok,
@@ -273,7 +277,7 @@ def run_audit(root: str | Path) -> dict[str, object]:
             "valid": registry_ok,
             "registered": sorted(registry_rows),
             "sources": registered_sources,
-            "retained_function_hashes": retained_hashes,
+            "function_hashes_verified": verified_hashes,
         },
         "checks": checks,
         "implementation_complete": all(checks.values()),

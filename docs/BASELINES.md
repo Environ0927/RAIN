@@ -1,7 +1,7 @@
 # Baseline reproduction
 
 `paper/baseline_registry.json` is the machine-readable source of truth. It
-classifies every paper baseline as an in-tree aggregation, a retained
+classifies every paper baseline as an in-tree aggregation, an adapter-backed
 implementation behind the unified trainer, an analytical accountant, or a
 pinned external artifact. The artifact does not relabel one implementation's
 measurements as another method's result.

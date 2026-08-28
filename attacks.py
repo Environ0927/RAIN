@@ -1,4 +1,4 @@
-"""Legacy attack compatibility code retained from the original codebase."""
+"""Attack implementations used by robustness experiments."""
 
 import math
 
@@ -100,7 +100,7 @@ def krum_attack(v, net, lr, f, device):
 def fltrust_attack(v, net, lr, f, device):
     """
     Local model poisoning attack against the fltrust aggregation rule.
-    Based on the specification in https://arxiv.org/abs/2012.13995 originally named adaptive attack.
+    Based on the adaptive attack specified in https://arxiv.org/abs/2012.13995.
     v: list of gradients
     net: model
     lr: learning rate

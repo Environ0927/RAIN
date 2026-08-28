@@ -1,4 +1,4 @@
-"""Thin PyTorch adapter; no cryptographic logic lives in the legacy trainer."""
+"""Thin PyTorch adapter between the trainer and the RAIN protocol."""
 
 from __future__ import annotations
 

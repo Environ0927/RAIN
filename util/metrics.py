@@ -1,4 +1,4 @@
-"""Metrics helpers for the retained legacy compatibility path."""
+"""Metric logging helpers for the top-level training interface."""
 
 import os, csv
 import torch
